@@ -39,6 +39,8 @@ export const users = pgTable("users", {
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  username: varchar("username", { length: 100 }),
+  password: varchar("password", { length: 255 }),
 });
 
 // Form definitions
