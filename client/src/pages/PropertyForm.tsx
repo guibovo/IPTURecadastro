@@ -13,6 +13,10 @@ import Header from "@/components/Header";
 import DynamicForm from "@/components/DynamicForm";
 import PhotoCapture from "@/components/PhotoCapture";
 import OCRScanner from "@/components/OCRScanner";
+import PropertyTemplates from "@/components/PropertyTemplates";
+import SmartSuggestions from "@/components/SmartSuggestions";
+import PropertyDuplicator from "@/components/PropertyDuplicator";
+import KeyboardShortcuts from "@/components/KeyboardShortcuts";
 import { 
   ArrowLeft, 
   Save, 
@@ -23,6 +27,7 @@ import {
 } from "lucide-react";
 import type { Mission, Form, PropertyCollection, Photo } from "@/types";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { smartAutofillService } from "@/lib/smartAutofill";
 
 const propertyFormSchema = z.object({
   inscricaoImobiliaria: z.string().min(1, "Inscrição imobiliária é obrigatória"),
@@ -56,6 +61,8 @@ export default function PropertyForm() {
   const [progress, setProgress] = useState(0);
   const [currentGPS, setCurrentGPS] = useState<{latitude: number, longitude: number, accuracy?: number} | null>(null);
   const [showOCRScanner, setShowOCRScanner] = useState(false);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+  const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
 
   const form = useForm<PropertyFormData>({
     resolver: zodResolver(propertyFormSchema),
@@ -273,6 +280,39 @@ export default function PropertyForm() {
         title: "Número detectado!",
         description: `Número ${detectedNumber} adicionado ao formulário`,
       });
+      autoSave();
+    }
+  };
+
+  const handleTemplateSelected = (templateData: any) => {
+    Object.keys(templateData).forEach(key => {
+      form.setValue(key as keyof PropertyFormData, templateData[key]);
+    });
+    toast({
+      title: "Template aplicado!",
+      description: "Campos preenchidos automaticamente",
+    });
+    autoSave();
+  };
+
+  const handleApplySuggestion = (field: string, value: any) => {
+    form.setValue(field as keyof PropertyFormData, value);
+    toast({
+      title: "Sugestão aplicada!",
+      description: `Campo ${field} preenchido automaticamente`,
+    });
+    autoSave();
+  };
+
+  const autoSave = async () => {
+    if (!autoSaveEnabled) return;
+    
+    try {
+      const formData = form.getValues();
+      await saveCollectionMutation.mutateAsync(formData);
+      setLastSaveTime(new Date());
+    } catch (error) {
+      console.warn('Auto-save failed:', error);
     }
   };
 
@@ -338,6 +378,15 @@ export default function PropertyForm() {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      {/* Keyboard Shortcuts */}
+      <KeyboardShortcuts
+        onSave={() => form.handleSubmit(handleSave)()}
+        onComplete={() => form.handleSubmit(handleComplete)()}
+        onUpdateGPS={updateGPS}
+        onToggleOCR={() => setShowOCRScanner(!showOCRScanner)}
+        onQuickFill={() => {}} // This would open templates dialog
+      />
+      
       {/* Form Header */}
       <header className="bg-card border-b border-border p-4 flex items-center justify-between">
         <div className="flex items-center space-x-3">
@@ -371,6 +420,14 @@ export default function PropertyForm() {
               </>
             )}
           </Badge>
+          {lastSaveTime && (
+            <Badge variant="outline" className="text-xs">
+              Salvo às {lastSaveTime.toLocaleTimeString('pt-BR', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+              })}
+            </Badge>
+          )}
           <Button 
             size="sm"
             onClick={form.handleSubmit(handleSave)}
@@ -394,6 +451,25 @@ export default function PropertyForm() {
 
       {/* Form Content */}
       <div className="p-4 space-y-6">
+        {/* Quick Actions Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <PropertyTemplates 
+            onTemplateSelected={handleTemplateSelected}
+            currentData={form.getValues()}
+          />
+          <PropertyDuplicator
+            onDuplicateProperty={handleTemplateSelected}
+            currentLocation={currentGPS}
+          />
+        </div>
+
+        {/* Smart Suggestions */}
+        <SmartSuggestions
+          currentData={form.getValues()}
+          currentLocation={currentGPS}
+          onApplySuggestion={handleApplySuggestion}
+        />
+
         <DynamicForm 
           form={form}
           onSave={handleSave}
