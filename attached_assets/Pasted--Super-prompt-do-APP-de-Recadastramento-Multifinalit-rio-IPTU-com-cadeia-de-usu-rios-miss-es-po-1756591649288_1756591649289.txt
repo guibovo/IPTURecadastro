@@ -1,0 +1,326 @@
+## Super prompt do APP de Recadastramento Multifinalitário / IPTU com cadeia de usuários, missões por shapefile e navegação GPS
+
+Use este texto como briefing técnico detalhado ou “super prompt” em uma plataforma low-code/no-code, ou como especificação para desenvolvimento nativo (Flutter/React Native/PWA). O app deve operar offline, trabalhar com mapa, importar shapefiles, capturar fotos, exportar CSV e permitir que administradores definam questionários, áreas de coleta e atribuam “missões” a recadastradores diretamente a partir de camadas do shapefile.
+
+---
+
+### 1) Objetivo do app
+- Realizar recadastramento multifinalitário e atualização do banco de dados de IPTU em campo.
+- Operação offline-first com sincronização quando houver internet.
+- Suporte a mapa com geolocalização do usuário, exibição/edição de feições de imóveis a partir de shapefile e navegação até o ponto (Google Maps/Waze).
+- Capturar dados estruturados definidos pelo administrador (formulário dinâmico), fotos das residências e metadados de coleta.
+- Exportar/importar dados em CSV e integrar com sistemas externos.
+
+---
+
+### 2) Perfis de usuário e cadeia de permissões
+- Administrador
+  - Define formulários dinâmicos (perguntas, regras, obrigatoriedade, tipos, condicionais).
+  - Define áreas de coleta (polígonos) por equipe/usuário.
+  - Importa shapefiles, seleciona e marca imóveis (feições) para missão.
+  - Atribui missões (tarefas) a recadastradores, com prazos e prioridades.
+  - Acompanha progresso em painel (mapa + listas + filtros).
+  - Gerencia usuários, perfis, auditoria e exportações CSV.
+- Recadastrador (agente de campo)
+  - Visualiza suas missões no mapa e em lista.
+  - Inicia coleta apenas dentro das áreas atribuídas (geofencing).
+  - Responde formulário definido pelo administrador.
+  - Captura fotos e envia/armazenar para cada imóvel.
+  - Sincroniza dados quando online e pode exportar CSV local se necessário.
+  - Abre navegação GPS com 1 toque (Google Maps/Waze) até o ponto da missão.
+
+Regras de acesso:
+- Recadastrador só vê dados das áreas e missões atribuídas a ele.
+- A coleta é bloqueada se o usuário estiver fora do polígono designado (mensagem: “Fora da área de coleta atribuída”).
+- Logs de auditoria registram criação, edição, upload de fotos, check-in/out, sincronizações.
+
+---
+
+### 3) Mapa e dados geográficos
+- Mapa base: OpenStreetMap/MapLibre ou Google Maps (licenciamento à parte).
+- Geolocalização de alta precisão com indicador de acurácia (círculo em metros).
+- Importação de shapefile:
+  - Suportar upload de .zip contendo .shp, .shx, .dbf e .prj.
+  - Reprojeção automática para EPSG:4326 (WGS84).
+  - Conversão interna para GeoJSON para melhor desempenho em mobile.
+  - Alternativa para grandes volumes: pré-processar em MVT (vector tiles) e/ou MBTiles.
+- Camada de imóveis:
+  - Exibir pontos/polígonos representando imóveis/unidades.
+  - Popup/tooltip com atributos-chave (id_imovel, endereço, status, responsável, prazo).
+  - Clusterização em zoom out e detalhamento em zoom in.
+- Edição/seleção no Admin:
+  - Admin seleciona feições no mapa para criar/atribuir missões (“marcar casas”).
+  - Pode desenhar pontos/ajustar centroides caso shapefile não tenha ponto de entrada.
+- Navegação:
+  - Botão “Navegar” no cartão da missão abre app de GPS:
+    - Google Maps: https://www.google.com/maps/dir/?api=1&destination={lat},{lng}&travelmode=driving
+    - Waze: https://waze.com/ul?ll={lat},{lng}&navigate=yes
+  - Se app não instalado, abrir fallback via navegador.
+
+---
+
+### 4) Formulário dinâmico (definido pelo Administrador)
+- Construtor de formulários no painel Admin:
+  - Tipos de campo: texto, número, data, hora, seletor único/múltiplo, foto, assinatura, sim/não, endereço, CPF/CNPJ, CEP, coordenadas, cálculo, anexo.
+  - Validações: obrigatório, máscaras, intervalos, regex, listas controladas, unicidade.
+  - Lógica condicional (ex.: se “uso = comercial”, exibir “alvará”).
+  - Seções, repetidores (unidades por lote), rascunho e revisão.
+  - Versões de formulário com migração controlada.
+- Regras de captura:
+  - Exigir posição GPS com acurácia máxima configurável (ex.: <= 15 m).
+  - Exigir no mínimo X fotos por tipo de imóvel.
+  - Carimbar metadados: data/hora, lat/lng, acurácia, usuário, id_missão, versão do formulário.
+
+Exemplo de schema JSON do formulário (simplificado):
+```json
+{
+  "form_id": "iptu_v1",
+  "title": "Recadastramento IPTU 2025",
+  "sections": [
+    {
+      "id": "dados_basicos",
+      "title": "Dados Básicos",
+      "fields": [
+        {"id": "inscricao_imobiliaria", "type": "text", "label": "Inscrição Imobiliária", "required": true},
+        {"id": "uso_predominante", "type": "select", "label": "Uso Predominante", "options": ["Residencial","Comercial","Misto"], "required": true},
+        {"id": "area_construida_m2", "type": "number", "label": "Área Construída (m²)", "min": 0},
+        {"id": "padrao_construtivo", "type": "select", "label": "Padrão Construtivo", "options": ["Baixo","Médio","Alto"]}
+      ]
+    },
+    {
+      "id": "imagens",
+      "title": "Fotos",
+      "fields": [
+        {"id": "foto_fachada", "type": "photo", "label": "Foto da Fachada", "required": true, "min_count": 1, "max_count": 5},
+        {"id": "foto_numero", "type": "photo", "label": "Foto da Numeração", "required": false}
+      ]
+    }
+  ],
+  "logic": [
+    {"if": {"field": "uso_predominante", "eq": "Comercial"}, "show": ["alvara_numero"]}
+  ],
+  "geofence_required": true,
+  "gps_accuracy_max_m": 15
+}
+```
+
+---
+
+### 5) Missões a partir do shapefile
+- Modelo de missão:
+  - A missão referencia a feição do shapefile: feature_id, camada, geometria (centroide para navegação), atributos.
+  - Campos: id_missao, recadastrador_id, prioridade, prazo, status (novo, em_andamento, pendente_foto, concluido, reprovado), timestamps.
+- Atribuição:
+  - Admin seleciona feições no mapa (por retângulo, polígono, filtro de atributos) e cria missões em lote.
+  - Cada missão pode ter um formulário e checklist específico.
+  - Opção de reatribuir missão ou abrir retrabalho.
+- Visualização pelo recadastrador:
+  - Lista e mapa com filtros (hoje, atrasadas, próximas, por bairro).
+  - Cartão da missão com: endereço, status, distância em linha reta, ETA estimado, botão Navegar (Waze/Google Maps), iniciar coleta, ver formulário.
+
+---
+
+### 6) Fluxo de trabalho
+1. Admin importa shapefile e define áreas de coleta (polígonos por equipe e por usuário).
+2. Admin constrói o formulário e publica a versão.
+3. Admin marca casas (feições) no shapefile e cria missões, atribuindo a recadastradores.
+4. Recadastrador sincroniza e recebe missões no app (offline-first).
+5. Em campo, abre missão, navega via GPS, realiza check-in (captura GPS), responde formulário e tira fotos.
+6. Salva localmente; quando online, sincroniza com backend. Conflitos são resolvidos pelo servidor com trilha de auditoria.
+7. Admin acompanha no painel e exporta CSV para integração.
+
+Status automáticos:
+- Ao abrir missão: em_andamento.
+- Ao concluir formulário obrigatório e fotos mínimas: concluido (ou “aguardando revisão” se houver fluxo de QA).
+- Ao reprovar no QA: reprovado → retorna ao recadastrador.
+
+---
+
+### 7) Fotos e mídia
+- Captura no app com:
+  - Compressão configurável, correção de orientação EXIF, foco/flash, anotação simples (opcional).
+  - Tag geográfica e amarração ao id_missão e id_imóvel.
+- Armazenamento:
+  - Offline em armazenamento seguro do app; upload em lote quando online.
+  - Nome de arquivo padrão: foto_{id_imovel}_{timestamp}.jpg
+- Políticas:
+  - Mínimo/máximo de fotos por campo.
+  - Proibir envio sem foto se marcado como obrigatório.
+  - Pré-visualização e marca d’água (opcional).
+
+---
+
+### 8) Offline-first e sincronização
+- Banco local no dispositivo: SQLite/Room/WatermelonDB/IndexedDB (PWA).
+- Fila de sincronização com status: pendente, enviando, enviado, erro.
+- Estratégia de conflitos:
+  - Regra “servidor vence” para campos controlados por Admin (ex.: reatribuição).
+  - Mesclagem para dados de formulário quando não há colisão.
+  - Histórico de versões por registro.
+- Mapa offline:
+  - Suporte a MBTiles de raster/tiles para áreas sem conexão.
+  - Cache de tiles em disco com TTL configurável.
+- Retomada de uploads e backoff exponencial.
+
+---
+
+### 9) Importação e exportação
+- CSV de exportação:
+  - Todos os campos do formulário + metadados + status + coordenadas.
+  - Opção de exportar apenas concluídos ou período filtrado.
+- CSV de importação:
+  - Importar tabela de missões (id_imovel, lat, lng, responsável, prazo, prioridade) para criar missões sem shapefile.
+- Shapefile:
+  - Importar camada de imóveis com atributos úteis (ex.: inscricao_imobiliaria, logradouro, numero, bairro).
+  - Possibilidade de gerar missão automaticamente por feição com base em regra (ex.: status = “não visitado”).
+
+Modelo de CSV (cabeçalhos sugeridos):
+- id_missao
+- id_imovel
+- inscricao_imobiliaria
+- logradouro
+- numero
+- bairro
+- cep
+- municipio
+- uf
+- proprietario_nome
+- proprietario_cpf_cnpj
+- uso_predominante
+- area_terreno_m2
+- area_construida_m2
+- padrao_construtivo
+- numero_pavimentos
+- ano_construcao
+- latitude
+- longitude
+- data_coleta_iso
+- coletor_id
+- status
+- observacoes
+- fotos_urls (separadas por “;”)
+- versao_formulario
+- acuracia_gps_m
+- atualizado_em
+
+Linhas de exemplo:
+- 1001, 42, 01.02.003.004.005, Rua das Flores, 123, Centro, 00000-000, Exemplo, EX, João Silva, 123.456.789-00, Residencial, 250, 180, Médio, 2, 1998, -23.55052, -46.63331, 2025-08-01T14:32:00Z, rec_007, concluido, “Portão fechado”, https://cdn/app/f/1001a.jpg;https://cdn/app/f/1001b.jpg, iptu_v1, 8, 2025-08-01T15:10:22Z
+
+---
+
+### 10) Painel do Administrador
+- Mapa + lista
+  - Filtros por área, status, recadastrador, prazo, atributos do shapefile.
+  - Heatmap/cluster e contadores rápidos (total, em andamento, concluído, atrasado).
+- Construtor de formulários
+  - Drag-and-drop, versões, validações, lógica condicional, campos calculados.
+- Atribuição de missões
+  - Seleção por mapa e por consulta de atributos; atribuição em lote; prazos.
+  - Visual de Gantt/Kanban simples para acompanhamento (opcional).
+- Áreas de coleta
+  - Desenhar/importar polígonos; associar a usuários/equipes; geofencing aplicado no app.
+- Exportação/Importação
+  - CSV, GeoJSON; upload de shapefile .zip; templates para download.
+- Auditoria e Relatórios
+  - Log por usuário, registro e ação; trilha de sincronização.
+  - Relatórios CSV e visualizações básicas.
+
+---
+
+### 11) Navegação GPS integrada
+- No cartão de missão e no detalhe do imóvel, botão “Navegar”.
+- Preferência do usuário salva (Waze ou Google Maps), com fallback:
+  - Google Maps: https://www.google.com/maps/dir/?api=1&destination={lat},{lng}&travelmode=driving
+  - Waze: https://waze.com/ul?ll={lat},{lng}&navigate=yes
+- Android: intents; iOS: URL schemes; abrir app se instalado, senão web.
+
+---
+
+### 12) Modelo de dados (simplificado)
+- usuarios(id, nome, email, perfil, equipe, ativo)
+- areas(id, nome, poligono_geojson, equipe)
+- formularios(id, versao, schema_json, ativo_desde, ativo_ate)
+- shapefile_camadas(id, nome, fonte, srid, data_importacao)
+- shapefile_features(id, camada_id, geom_geojson, atributos_json)
+- missoes(id, feature_id, recadastrador_id, formulario_id, prazo, prioridade, status, criado_em, atualizado_em)
+- coletas(id, missao_id, respostas_json, latitude, longitude, acuracia_m, iniciado_em, concluido_em, versao_formulario)
+- fotos(id, coleta_id, url_local, url_remota, legenda, latitude, longitude, tirada_em)
+- auditoria(id, usuario_id, entidade, entidade_id, acao, payload, timestamp)
+- sync_fila(id, tipo, referencia_id, status, tentativas, ultima_msg, atualizado_em)
+
+Chaves e índices por geografia:
+- Índice espacial (R-Tree/quad-tree) para shapefile_features.
+- Índices por status/prazo em missoes.
+
+---
+
+### 13) Segurança, privacidade e conformidade
+- Autenticação: e-mail/senha, com opção de SSO (quando aplicável).
+- Autorização por perfil e área (RBAC + boundary geográfico).
+- Criptografia:
+  - Em trânsito: HTTPS/TLS.
+  - Em repouso: criptografia de banco local e de fotos (quando sensível).
+- LGPD/privacidade:
+  - Minimizar dados pessoais, mascarar CPF quando não necessário.
+  - Política de retenção e consentimento quando aplicável.
+- Auditoria completa de alterações.
+
+---
+
+### 14) Desempenho e limites
+- Paginação e carregamento sob demanda das feições (tile-based).
+- Simplificação de geometria para visualização em mobile.
+- Lote máximo por sincronização configurável (ex.: 500 registros/vez).
+- Compressão de fotos e limite de resolução (ex.: 1600 px no maior lado).
+
+---
+
+### 15) Critérios de aceite (exemplos)
+- Importar shapefile .zip e visualizar feições corretamente reprojetadas em WGS84.
+- Admin consegue desenhar áreas, atribuir missões em lote e publicar formulário.
+- Recadastrador vê suas missões offline, inicia coleta dentro da área, preenche formulário, tira fotos e salva.
+- Botão “Navegar” abre Waze/Maps com o destino correto.
+- Exportar CSV com todos os campos e links das fotos após sincronização.
+- Auditoria registra quem fez o quê e quando.
+- Sincronização retoma após perda de conexão sem perda de dados.
+
+---
+
+### 16) Roadmap sugerido
+- Fase 1 (MVP): mapa, import shapefile, lista de missões, formulário básico, fotos, offline save, sync, export CSV, navegação GPS.
+- Fase 2: construtor de formulários completo com lógica condicional, áreas de coleta, auditoria, painel de progresso.
+- Fase 3: otimização de performance com vector tiles, QA/revisão, relatórios visuais, integrações via API/webhook.
+- Fase 4: rotas otimizadas multi-parada, check-in com selfie (opcional), assinaturas, anexos extras.
+
+---
+
+### 17) Observações técnicas (para equipe de dev)
+- Mobile: Flutter (mapa: flutter_map com MapLibre ou google_maps_flutter; geodados: turf-dart/proj4dart; SQLite: sqflite; background sync; compartilhamento com intents/URL schemes).
+- PWA/Web Admin: React + MapLibre GL/Leaflet + deck.gl (se necessário), IndexedDB, Web Workers para parsing do shapefile, proj4js, geobuf/pbf para compactação.
+- Backend: Node/Express ou Python/FastAPI; Postgres + PostGIS; fila (BullMQ/Celery); storage S3 compatível; autenticação JWT/OAuth2.
+- Parsing de shapefile: ogr2ogr no backend ou lib pura em JS/TS para conversão a GeoJSON; sempre validar SRID e .prj.
+
+---
+
+### 18) Templates prontos
+
+A) Template de CSV de missões (cabeçalho):
+id_missao,id_imovel,inscricao_imobiliaria,logradouro,numero,bairro,cep,municipio,uf,proprietario_nome,proprietario_cpf_cnpj,uso_predominante,area_terreno_m2,area_construida_m2,padrao_construtivo,numero_pavimentos,ano_construcao,latitude,longitude,data_coleta_iso,coletor_id,status,observacoes,fotos_urls,versao_formulario,acuracia_gps_m,atualizado_em
+
+B) Exemplos de status:
+- novo, em_andamento, pendente_foto, concluido, reprovado
+
+C) Campos recomendados no shapefile:
+- id_imovel, inscricao_imobiliaria, logradouro, numero, bairro, cep, municipio, uf, status_inicial, observacoes
+
+---
+
+Resumo
+- Você terá um app de recadastramento com dois perfis: Administrador (define formulário, áreas e missões a partir do shapefile) e Recadastrador (executa as missões em campo).
+- Missões são criadas marcando casas diretamente no shapefile e atribuídas a usuários.
+- O recadastrador vê suas missões no mapa e em lista, navega com 1 toque (Google Maps/Waze), coleta dados e fotos, tudo offline-first com sincronização.
+- Dados podem ser exportados/importados em CSV e integrados a outros sistemas.
+
+Quer que eu gere:
+- Um template .zip de shapefile de exemplo (estrutura de atributos) e o CSV modelo com 10 linhas fictícias?
+- A versão deste prompt adaptada para Flutter ou React Native com lista de bibliotecas e trechos de código (inclusive o deep link de navegação)?

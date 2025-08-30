@@ -1,0 +1,324 @@
+## Prompt completo para gerar um APP de Recadastramento Multifinalitário / Banco de Dados de IPTU
+
+Use o texto abaixo como “super prompt” em um gerador de apps, plataforma low-code/no-code, ou como briefing técnico para sua equipe de desenvolvimento. O objetivo é ter um aplicativo móvel (Android/iOS) e, preferencialmente, uma PWA, com foco em recadastramento multifinalitário e atualização de banco de dados de IPTU, com suporte a mapa, shapefiles, fotos e sincronização offline/online.
+
+---
+
+### Objetivo e escopo
+Crie um aplicativo de Recadastramento Multifinalitário / Banco de Dados de IPTU para coleta em campo, revisão cadastral e atualização de dados de imóveis urbanos. O app deve:
+- Exibir um mapa com a localização atual do usuário (GPS em tempo real).
+- Carregar e sobrepor camadas geográficas de lotes/casas via shapefile (preferencialmente com suporte a upload de ZIP contendo .shp, .shx, .dbf; converter internamente para GeoJSON para renderização).
+- Permitir coletar e salvar dados de recadastramento (formulário rico) e fotos das residências, com georreferenciamento e carimbo de data/hora.
+- Operar em modo offline-first com banco local (SQLite ou similar), e sincronizar com servidor quando houver internet.
+- Exportar e importar dados em CSV para integração com outros sistemas; permitir upload de CSV para pré-carga/atualização e exportação de CSV para envio a outros programas.
+- Possibilitar salvar on-line (quando houver internet) e manter fila de sincronização com resolução de conflitos.
+
+---
+
+### Plataformas e tecnologia (aceite pelo gerador ajustar conforme stack)
+- Preferencial: Mobile nativo ou cross-platform (Flutter ou React Native). Alternativa: PWA com capacidades offline robustas.
+- Mapa: MapLibre GL / Mapbox / Google Maps (um deles), com suporte a:
+  - Geolocalização do usuário (GPS de alta precisão).
+  - Camadas vetoriais (GeoJSON) e raster/tile offline (opcional).
+  - Estilização de camadas e legendas.
+- Dados locais: SQLite (Room, WatermelonDB, ObjectBox ou SQflite) para persistência offline.
+- Sincronização: Fila de jobs + API REST/GraphQL (posterior), com controle de “sync_status” por registro.
+- Importação de shapefile: Conversão local (shpjs/shapefile-js) ou server-side (GDAL/OGR, mapshaper) para GeoJSON.
+- Imagens: Captura de câmera nativa, compressão, metadados (EXIF, geotag), armazenamento local com linkagem ao imóvel e posterior upload.
+
+---
+
+### Personas principais
+- Agente de campo: realiza recadastro e tira fotos.
+- Supervisor: valida dados, gerencia camadas e sincronização.
+- Administrador: configura formulários, permissões, listas e integrações.
+
+---
+
+### Funcionalidades essenciais
+1. Mapa e localização
+   - Mostrar a posição do usuário no mapa (ponto azul).
+   - Botão “centralizar na minha localização”.
+   - Exibir quadrícula/bairros e camadas de lotes/casas a partir de shapefile convertido para GeoJSON.
+   - Filtrar/exibir camadas por:
+     - Bairro/quadra/lote
+     - Status do cadastro (pendente, em andamento, concluído)
+     - Propriedade com divergência (área construída x área declarada, por exemplo)
+   - Selecionar um lote/casa no mapa para abrir seu cadastro.
+   - Modo “próximos de mim” com ordenação por distância.
+
+2. Shapefiles e camadas vetoriais
+   - Importar shapefile via upload de arquivo ZIP contendo .shp, .shx, .dbf (e .prj se disponível).
+   - Converter automaticamente para GeoJSON e armazenar localmente para renderização.
+   - Opção de alternar camadas, alterar opacidade, cores e legenda.
+   - Identificar propriedades (popup/tooltip) ao tocar no polígono/ponto.
+   - Suporte a CRS comum (WGS84 EPSG:4326). Se diferente, reprojetar automaticamente.
+
+3. Cadastro/recadastro de imóvel
+   - Formulário offline com campos:
+     - Identificadores: id_imovel, inscricao_municipal, cod_lote, cod_setor, cod_quadra, cod_face, municipio, uf
+     - Endereço: logradouro, numero, complemento, bairro, CEP, ponto_de_referencia
+     - Proprietário/ocupante: nome, CPF/CNPJ, contato (telefone, e-mail)
+     - Geolocalização: latitude, longitude, altitude (opcional), precisão
+     - Características do terreno: área_terreno_m2, testada_m, topografia, pavimentacao_via, meio_fio, drenagem
+     - Edificação: area_construida_m2, numero_pavimentos, padrao_construtivo, material_predominante, ano_construcao_estimada, uso_principal (residencial, comercial, misto, institucional), unidade_autonoma (sim/não), numero_unidades
+     - Instalações/serviços: agua, esgoto, energia, iluminação_publica, coleta_lixo
+     - Tributação: categoria_iptu, isencao (motivo), valor_venal_estimado (opcional), observacoes
+     - Estado do recadastro: status (pendente/em_andamento/concluido), revisao_supervisao (aprovado/reprovado), motivo_da_reprovacao
+     - Auditoria: agente_id, data_coleta, versao_registro, sync_status
+   - Validações: obrigatoriedade de campos-chave (ex.: inscricao_municipal ou id_imovel, endereço básico), formatos (CPF/CNPJ, CEP), numéricos com separador decimal ponto.
+   - Regras: não permitir finalizar “concluído” sem ao menos 1 foto, geolocalização e endereço.
+
+4. Fotos e mídia
+   - Captura com câmera (frente, lateral, numeração, fachada).
+   - Mínimo de 1 a 4 fotos por imóvel (configurável).
+   - Compressão e redimensionamento para upload eficiente.
+   - Metadados: timestamp, geotag, agente_id.
+   - Visualização em galeria por imóvel; marcar “foto principal”.
+
+5. Offline-first e sincronização
+   - Todo o app deve funcionar offline (cadastros, edição, anexar fotos, mapear).
+   - Banco local (SQLite). Tabelas com flags sync_status: “pendente”, “em_sincronizacao”, “sincronizado”, “erro”.
+   - Fila de sincronização que:
+     - Envia registros e fotos quando houver internet.
+     - Resolve conflitos por “last-write-wins” com versionamento (versao_registro) e log de alterações; permitir opção de “merge assistido” para campos divergentes.
+   - Indicador de conectividade no app e painel de sincronização (sucessos, falhas, reenvio).
+
+6. Importação e exportação de dados
+   - Exportar CSV dos imóveis, com cabeçalho consistente e separador “;” (compatível com uso no Brasil), codificação UTF-8.
+   - Exportar fotos como arquivos e um CSV de manifest com caminhos/URLs, id_imovel e metadados.
+   - Importar CSV para:
+     - Pré-carga de base de imóveis (seed)
+     - Atualização em massa (merge por id_imovel ou inscricao_municipal)
+   - Validação de CSV: cabeçalhos obrigatórios, tipos, normalização (trocar vírgula por ponto em decimais), logs de erros por linha, prévia de importação com “simular/confirmar”.
+   - Opção de upload dos CSVs para nuvem quando online.
+
+7. Fluxos de uso
+   - Login do agente (e-mail/senha ou SSO; manter sessão offline).
+   - Tela inicial com:
+     - Botão “Iniciar Recadastro”
+     - “Imóveis perto de mim”
+     - “Mapa”
+     - “Sincronização”
+     - “Importar camadas (shapefile)”
+     - “Importar/Exportar CSV”
+   - Criar/editar imóvel:
+     - Por mapa (toque no lote) ou por busca (inscrição, endereço, proprietário).
+     - Preenche formulário, tira fotos, salva localmente.
+     - Marcar status “concluído” quando pronto.
+   - Painel do supervisor:
+     - Filtrar por status, bairro, agente
+     - Revisar cadastros e aprovar/reprovar
+     - Gerar exportações CSV
+
+8. Segurança, conformidade e LGPD
+   - Autenticação segura, armazenamento local criptografado (dados sensíveis).
+   - Controle de acesso por perfis (agente/supervisor/admin).
+   - Consentimento de uso de dados quando aplicável; mascarar dados pessoais em exportações se configurado.
+   - Registro de auditoria: quem alterou, quando, o quê.
+   - Política de retenção e exclusão (direito de eliminação).
+
+9. Usabilidade e desempenho
+   - Mapas fluidos; renderização eficiente de camadas (simplificação de geometria quando necessário).
+   - Cache de tiles e camadas para operação offline (opcional: suporte a MBTiles ou vector tiles offline).
+   - Formulários com sugestões e listas (bairros, tipos de uso, padrões construtivos).
+   - Acessibilidade: alto contraste, tamanhos ajustáveis, suporte a leitores de tela.
+   - Indicar precisão do GPS e permitir ajuste manual do ponto no mapa.
+
+10. Telemetria e diagnóstico
+   - Logs locais de erros e de importação/exportação.
+   - Métricas: número de cadastros por dia, taxa de sincronização, tempo médio por imóvel.
+   - Tela de “Relatórios rápidos” com filtros e contadores.
+
+---
+
+### Modelo de dados (sugestão)
+Entidades principais:
+- Imovel
+  - id_imovel (string/uuid)
+  - inscricao_municipal (string)
+  - municipio (string), uf (string)
+  - logradouro (string), numero (string), complemento (string), bairro (string), cep (string)
+  - proprietario_nome (string), proprietario_cpf_cnpj (string), contato_telefone (string), contato_email (string)
+  - latitude (float), longitude (float), altitude (float opcional), precisao_gps (float)
+  - area_terreno_m2 (float), area_construida_m2 (float), numero_pavimentos (int)
+  - uso_principal (enum), padrao_construtivo (enum), material_predominante (enum), ano_construcao_estimada (int)
+  - servicos: agua (bool), esgoto (bool), energia (bool), iluminacao_publica (bool), coleta_lixo (bool)
+  - categoria_iptu (string), isencao (bool), isencao_motivo (string), valor_venal_estimado (float)
+  - status (enum: pendente/em_andamento/concluido)
+  - revisao_supervisao (enum: aguardando/aprovado/reprovado), motivo_da_reprovacao (string)
+  - agente_id (string), data_coleta (datetime ISO-8601)
+  - versao_registro (int), sync_status (enum), updated_at (datetime)
+- Foto
+  - id_foto (uuid), id_imovel (fk), caminho_local (string), url_remota (string opcional)
+  - principal (bool), latitude (float), longitude (float), timestamp (datetime), agente_id (string)
+  - largura_px (int), altura_px (int), tamanho_bytes (int)
+- Camada
+  - id_camada (uuid), nome (string), tipo (lotes/casas/outros), origem (shapefile/geojson)
+  - arquivo_original (string), caminho_geojson_local (string), estilo (json), ativo (bool), created_at (datetime)
+- Usuario
+  - id_usuario (uuid), nome, email, perfil (agente/supervisor/admin), status (ativo/inativo)
+- SyncJob
+  - id_job (uuid), tipo (upload_imovel, upload_foto, download_base, etc.), status (pendente/em_execucao/sucesso/erro), detalhes (json), tentativas (int), ultima_execucao (datetime)
+
+Índices recomendados: por inscricao_municipal, por status, geoespacial (lat/long), por bairro.
+
+---
+
+### Importação/Exportação: CSV
+- Padrão CSV:
+  - Separador: “;”
+  - Codificação: UTF-8
+  - Decimal: ponto (.)
+- Cabeçalho mínimo de exportação de Imovel (exemplo):
+id_imovel;inscricao_municipal;municipio;uf;logradouro;numero;complemento;bairro;cep;proprietario_nome;proprietario_cpf_cnpj;contato_telefone;contato_email;latitude;longitude;area_terreno_m2;area_construida_m2;numero_pavimentos;uso_principal;padrao_construtivo;material_predominante;ano_construcao_estimada;agua;esgoto;energia;iluminacao_publica;coleta_lixo;categoria_iptu;isencao;isencao_motivo;status;revisao_supervisao;motivo_da_reprovacao;agente_id;data_coleta;versao_registro;sync_status;updated_at
+
+- Manifest de fotos (CSV):
+id_foto;id_imovel;caminho_local;url_remota;principal;latitude;longitude;timestamp;agente_id;largura_px;altura_px;tamanho_bytes
+
+- Validações de importação:
+  - Checagem de cabeçalho obrigatório.
+  - Tipos e formatos (CPF/CNPJ, CEP, floats).
+  - Prévia com amostragem e percentual de erros.
+  - Log detalhado por linha com causa do erro.
+  - Modo “simular” antes de confirmar.
+
+---
+
+### Requisitos de UX
+- Tela de mapa com:
+  - Botão para alternar camadas (checklist).
+  - Controle de opacidade da camada de lotes/casas.
+  - Legenda com cores e significados.
+  - Busca por endereço/inscrição municipal.
+- Tela de formulário:
+  - Seções dobráveis (Endereço, Proprietário, Características, Serviços, Tributação, Fotos).
+  - Indicadores de obrigatoriedade.
+  - Salvamento automático rascunho.
+- Tela de sincronização:
+  - Contadores por status.
+  - Botão “Sincronizar agora”.
+  - Lista de falhas com opção “tentar novamente”.
+
+---
+
+### Regras de negócio e validações críticas
+- Não permitir “concluído” sem:
+  - Pelo menos 1 foto
+  - Coordenada GPS válida (ou ponto ajustado manualmente no mapa)
+  - Endereço mínimo (logradouro, número, bairro)
+- Em caso de conflito na sincronização:
+  - Aplicar last-write-wins baseado em updated_at e versao_registro
+  - Registrar difs no log
+  - Oferecer ao supervisor opção de revisão para casos críticos
+- Se shapefile estiver em CRS diferente de WGS84:
+  - Reprojetar automaticamente para EPSG:4326 antes da renderização
+
+---
+
+### Critérios de aceite (aceitar como pronto quando)
+- Mapa mostra posição do usuário, centraliza e atualiza.
+- Shapefile .zip é importado, convertido, renderizado com legenda e seleção de feições.
+- É possível criar/editar imóvel, anexar 1+ fotos, salvar offline, marcar como “concluído”.
+- Exportar CSV completo e manifest de fotos; importar CSV com prévia e validação.
+- Sincronização envia cadastros e fotos quando on-line; falhas têm reenvio; status visível.
+- Busca por inscrição municipal e por endereço funciona.
+- Filtrar imóveis por status e por proximidade funciona.
+- Segurança: login, perfis, dados sensíveis protegidos no dispositivo.
+
+---
+
+### Exemplo de JSON de um imóvel (para APIs e sincronização)
+```json
+{
+  \"id_imovel\": \"c86d9f7a-3e86-4c8a-9b0e-1c1f0a8e8a77\",
+  \"inscricao_municipal\": \"123456-78\",
+  \"municipio\": \"SuaCidade\",
+  \"uf\": \"UF\",
+  \"logradouro\": \"Rua das Flores\",
+  \"numero\": \"100\",
+  \"complemento\": \"Casa A\",
+  \"bairro\": \"Centro\",
+  \"cep\": \"00000-000\",
+  \"proprietario_nome\": \"João da Silva\",
+  \"proprietario_cpf_cnpj\": \"123.456.789-00\",
+  \"contato_telefone\": \"(00) 91234-5678\",
+  \"contato_email\": \"joao@example.com\",
+  \"latitude\": -23.55052,
+  \"longitude\": -46.63331,
+  \"altitude\": 760.5,
+  \"precisao_gps\": 5.2,
+  \"area_terreno_m2\": 250.0,
+  \"area_construida_m2\": 180.0,
+  \"numero_pavimentos\": 2,
+  \"uso_principal\": \"residencial\",
+  \"padrao_construtivo\": \"medio\",
+  \"material_predominante\": \"alvenaria\",
+  \"ano_construcao_estimada\": 1998,
+  \"agua\": true,
+  \"esgoto\": true,
+  \"energia\": true,
+  \"iluminacao_publica\": true,
+  \"coleta_lixo\": true,
+  \"categoria_iptu\": \"normal\",
+  \"isencao\": false,
+  \"isencao_motivo\": \"\",
+  \"status\": \"concluido\",
+  \"revisao_supervisao\": \"aguardando\",
+  \"motivo_da_reprovacao\": \"\",
+  \"agente_id\": \"agente-001\",
+  \"data_coleta\": \"2025-01-20T14:30:00Z\",
+  \"versao_registro\": 3,
+  \"sync_status\": \"pendente\",
+  \"updated_at\": \"2025-01-20T14:31:02Z\"
+}
+```
+
+---
+
+### Considerações de desempenho e operação em campo
+- Cache de camadas para áreas de trabalho; permitir baixar camadas antes de ir a campo.
+- Simplificação de geometria (tolerância configurável) para camadas muito pesadas.
+- Compressão de imagens para reduzir payload (ex.: 1600px lado maior, qualidade 0.7).
+- Mecanismo de “reparo de GPS” com ajuste manual do ponto em casos de baixa precisão.
+
+---
+
+### Relatórios e acompanhamento
+- Contadores: total de imóveis, pendentes, em andamento, concluídos, por bairro e por agente.
+- Mapa de calor (opcional) de produtividade.
+- Exportação de relatórios em CSV.
+
+---
+
+### Perguntas que o gerador deve esclarecer (se necessário)
+- Haverá cadastro de unidades autônomas por imóvel (condomínios)? Se sim, modelar entidade “Unidade”.
+- Quais listas controladas precisam ser configuráveis no app (bairros, padrões construtivos, usos)?
+- Há necessidade de multi-município/tenant? Se sim, adicionar chave tenant_id em todas as entidades.
+- Integrações desejadas para geocodificação/reverso (ex.: Nominatim/OSM, Google, HERE)?
+- Haverá autenticação offline com expiração? Qual a política de senha/SSO?
+- Tamanho máximo e quantidade de fotos por imóvel?
+- Necessidade de tiles offline (MBTiles) para áreas sem sinal? Se sim, incluir gerenciador de pacotes de mapas offline.
+
+---
+
+### Entregáveis mínimos
+- App mobile (Android e iOS) + PWA (se possível) com as funcionalidades listadas.
+- Tela de mapa com camadas e localização.
+- Formulário completo de imóvel com validações.
+- Captura e galeria de fotos por imóvel.
+- Importação de shapefile e conversão para GeoJSON.
+- Exportação/Importação CSV com validação.
+- Mecanismo de sincronização offline/online com fila e logs.
+- Painel básico de relatórios.
+- Documentação de uso e de integração (dicionário de dados, exemplos de CSV/JSON).
+
+---
+
+Se quiser, posso transformar este prompt em versões específicas para:
+- Flutter (com bibliotecas sugeridas e estruturas de pastas)
+- React Native
+- PWA (Leaflet/MapLibre + IndexedDB/SQLite WASM)
+- AppSheet/Power Apps/Bubble (low-code)
+
+Deseja que eu gere também um modelo de planilha CSV inicial com cabeçalhos e algumas linhas de exemplo, ou um checklist de testes de campo?
