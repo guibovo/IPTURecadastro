@@ -20,11 +20,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   setupLocalAuth(app);
   await setupAuth(app);
 
-  // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  // Auth routes - support both Replit and local auth
+  app.get('/api/auth/user', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Handle both Replit auth (with claims) and local auth (direct user object)
+      let userId;
+      if (req.user.claims) {
+        // Replit auth
+        userId = req.user.claims.sub;
+      } else {
+        // Local auth
+        userId = req.user.id;
+      }
+
       const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -35,7 +52,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin dashboard routes
   app.get('/api/admin/recent-activity', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.claims ? req.user.claims.sub : req.user.id;
       const user = await storage.getUser(userId);
       
       if (user?.role !== 'admin') {
@@ -101,7 +118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/admin/users', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.claims ? req.user.claims.sub : req.user.id;
       const user = await storage.getUser(userId);
       
       if (user?.role !== 'admin') {
@@ -118,7 +135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/municipal-data/stats', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.claims ? req.user.claims.sub : req.user.id;
       const user = await storage.getUser(userId);
       
       if (user?.role !== 'admin') {
@@ -141,7 +158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/admin/sync-system', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.claims ? req.user.claims.sub : req.user.id;
       const user = await storage.getUser(userId);
       
       if (user?.role !== 'admin') {
