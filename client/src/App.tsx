@@ -16,6 +16,7 @@ import OfflineMaps from "@/pages/OfflineMaps";
 import LocationTracking from "@/pages/LocationTracking";
 import Features from "@/pages/Features";
 import ProductivityFeatures from "@/pages/ProductivityFeatures";
+import MunicipalDataPage from "@/pages/MunicipalDataPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -37,6 +38,7 @@ function Router() {
           <Route path="/location-tracking" component={LocationTracking} />
           <Route path="/features" component={Features} />
           <Route path="/productivity" component={ProductivityFeatures} />
+          <Route path="/admin/municipal-data" component={MunicipalDataPage} />
         </>
       )}
       <Route component={NotFound} />

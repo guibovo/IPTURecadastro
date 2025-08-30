@@ -22,7 +22,9 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
-  UserPlus
+  UserPlus,
+  Database,
+  MapPin
 } from "lucide-react";
 import { useLocation } from "wouter";
 import type { Mission, Form, ShapefileLayer, DashboardStats } from "@/types";
@@ -327,6 +329,18 @@ export default function Admin() {
                 <div>
                   <div className="font-medium">Mapas Offline</div>
                   <div className="text-xs opacity-80">Gerenciar cache de mapas para trabalho offline</div>
+                </div>
+              </Button>
+
+              <Button 
+                onClick={() => setLocation("/admin/municipal-data")}
+                className="w-full bg-indigo-600 text-white h-auto py-4 text-left flex items-center justify-start"
+                data-testid="button-municipal-data"
+              >
+                <Database className="h-5 w-5 mr-3" />
+                <div>
+                  <div className="font-medium">Dados Municipais</div>
+                  <div className="text-xs opacity-80">Importar dados municipais para matching inteligente</div>
                 </div>
               </Button>
             </div>

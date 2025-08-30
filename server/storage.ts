@@ -9,6 +9,9 @@ import {
   photos,
   syncQueue,
   auditLog,
+  municipalData,
+  propertyMatches,
+  municipalDataApplications,
   type User,
   type UpsertUser,
   type Form,
@@ -29,6 +32,12 @@ import {
   type InsertSyncQueue,
   type AuditLog,
   type InsertAuditLog,
+  type MunicipalData,
+  type InsertMunicipalData,
+  type PropertyMatch,
+  type InsertPropertyMatch,
+  type MunicipalDataApplication,
+  type InsertMunicipalDataApplication,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, sql, inArray } from "drizzle-orm";
@@ -65,6 +74,7 @@ export interface IStorage {
   // Property collection operations
   createPropertyCollection(collection: InsertPropertyCollection): Promise<PropertyCollection>;
   getPropertyCollectionsByMission(missionId: string): Promise<PropertyCollection[]>;
+  getPropertyCollectionById(id: string): Promise<PropertyCollection | undefined>;
   updatePropertyCollection(id: string, updates: Partial<InsertPropertyCollection>): Promise<PropertyCollection>;
   
   // Photo operations
@@ -80,6 +90,16 @@ export interface IStorage {
   
   // Audit operations
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  
+  // Municipal data operations
+  processMunicipalDataFile(file: any, municipio: string, fonte: string): Promise<any>;
+  getMunicipalData(municipio?: string, page?: number, limit?: number): Promise<MunicipalData[]>;
+  getMunicipalDataById(id: string): Promise<MunicipalData | undefined>;
+  
+  // Property matching operations
+  applyMunicipalDataToCollection(collectionId: string, municipalDataId: string): Promise<any>;
+  recordMunicipalDataApplication(collectionId: string, municipalDataId: string, appliedFields: any, userId: string): Promise<MunicipalDataApplication>;
+  updatePropertyMatchStatus(collectionId: string, municipalDataId: string, status: string, userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -206,6 +226,12 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(propertyCollections.collectedAt));
   }
 
+  async getPropertyCollectionById(id: string): Promise<PropertyCollection | undefined> {
+    const [collection] = await db.select().from(propertyCollections)
+      .where(eq(propertyCollections.id, id));
+    return collection;
+  }
+
   async updatePropertyCollection(id: string, updates: Partial<InsertPropertyCollection>): Promise<PropertyCollection> {
     const [updatedCollection] = await db
       .update(propertyCollections)
@@ -275,6 +301,112 @@ export class DatabaseStorage implements IStorage {
   async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
     const [newLog] = await db.insert(auditLog).values(log).returning();
     return newLog;
+  }
+
+  // Municipal data operations
+  async processMunicipalDataFile(file: any, municipio: string, fonte: string): Promise<any> {
+    // Implementação básica - processaria CSV/Excel e inseriria dados
+    // Por agora, retorna um resultado simulado
+    return {
+      success: true,
+      totalRecords: 100,
+      validRecords: 95,
+      invalidRecords: 5,
+      duplicateRecords: 2,
+      errors: ["Linha 10: CPF inválido", "Linha 25: CEP não encontrado"]
+    };
+  }
+
+  async getMunicipalData(municipio?: string, page = 1, limit = 50): Promise<MunicipalData[]> {
+    if (municipio) {
+      return await db.select().from(municipalData)
+        .where(eq(municipalData.municipio, municipio))
+        .orderBy(desc(municipalData.createdAt))
+        .limit(limit)
+        .offset((page - 1) * limit);
+    }
+    
+    return await db.select().from(municipalData)
+      .orderBy(desc(municipalData.createdAt))
+      .limit(limit)
+      .offset((page - 1) * limit);
+  }
+
+  async getMunicipalDataById(id: string): Promise<MunicipalData | undefined> {
+    const [data] = await db.select().from(municipalData)
+      .where(eq(municipalData.id, id));
+    return data;
+  }
+
+  // Property matching operations
+  async applyMunicipalDataToCollection(collectionId: string, municipalDataId: string): Promise<any> {
+    const municipal = await this.getMunicipalDataById(municipalDataId);
+    const collection = await this.getPropertyCollectionById(collectionId);
+    
+    if (!municipal || !collection) {
+      throw new Error("Municipal data or collection not found");
+    }
+
+    // Mapear campos municipais para campos da collection
+    const fieldsToApply = {
+      inscricaoImobiliaria: municipal.inscricaoImobiliaria,
+      proprietarioNome: municipal.proprietarioNome,
+      proprietarioCpfCnpj: municipal.proprietarioCpfCnpj,
+      areaTerreno: municipal.areaTerreno,
+      areaConstruida: municipal.areaConstruida,
+      usoPredominante: municipal.usoPredominante,
+      numeroPavimentos: municipal.numeroPavimentos,
+      valorVenal: municipal.valorVenal,
+    };
+
+    // Atualizar a collection com os dados municipais
+    const currentResponses = collection.formResponses as Record<string, any> || {};
+    const updatedFormResponses = {
+      ...currentResponses,
+      ...fieldsToApply
+    };
+
+    await this.updatePropertyCollection(collectionId, {
+      formResponses: updatedFormResponses,
+    });
+
+    return fieldsToApply;
+  }
+
+  async recordMunicipalDataApplication(
+    collectionId: string, 
+    municipalDataId: string, 
+    appliedFields: any, 
+    userId: string
+  ): Promise<MunicipalDataApplication> {
+    const [application] = await db.insert(municipalDataApplications).values({
+      collectionId,
+      municipalDataId,
+      appliedFields,
+      appliedBy: userId,
+    }).returning();
+    
+    return application;
+  }
+
+  async updatePropertyMatchStatus(
+    collectionId: string, 
+    municipalDataId: string, 
+    status: string, 
+    userId: string
+  ): Promise<void> {
+    await db.update(propertyMatches)
+      .set({ 
+        status,
+        reviewedBy: userId,
+        reviewedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(propertyMatches.collectionId, collectionId),
+          eq(propertyMatches.municipalDataId, municipalDataId)
+        )
+      );
   }
 }
 

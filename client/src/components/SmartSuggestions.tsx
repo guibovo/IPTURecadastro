@@ -1,238 +1,332 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
-  Lightbulb,
-  MapPin,
-  TrendingUp,
-  Clock,
+  Brain,
+  CheckCircle2,
+  XCircle,
+  Eye,
   ChevronDown,
-  ChevronUp,
-  Check,
-  X
+  ChevronRight,
+  MapPin,
+  User,
+  Home,
+  FileText,
+  Zap,
+  AlertTriangle
 } from "lucide-react";
-import { smartAutofillService } from "@/lib/smartAutofill";
 
-interface Suggestion {
+interface MatchReason {
+  type: string;
   field: string;
-  value: any;
-  confidence: number;
-  reason: string;
+  score: number;
+  weight: number;
+  description: string;
+}
+
+interface PropertyMatch {
+  id: string;
+  municipalDataId: string;
+  score: number;
+  confidence: string;
+  reasons: MatchReason[];
+  autoApplied: boolean;
+  municipalData: {
+    inscricaoImobiliaria: string;
+    logradouro: string;
+    numeroLogradouro: string;
+    bairro: string;
+    proprietarioNome: string;
+    usoPredominante: string;
+    areaTerreno: number;
+    areaConstruida: number;
+    valorVenal: number;
+  };
 }
 
 interface SmartSuggestionsProps {
-  currentData: any;
-  currentLocation?: { latitude: number; longitude: number };
-  onApplySuggestion: (field: string, value: any) => void;
+  matches: PropertyMatch[];
+  onApplyMatch: (matchId: string, municipalDataId: string) => void;
+  onRejectMatch: (matchId: string) => void;
+  onViewDetails: (municipalData: any) => void;
+  isLoading?: boolean;
 }
 
 export default function SmartSuggestions({ 
-  currentData, 
-  currentLocation, 
-  onApplySuggestion 
+  matches, 
+  onApplyMatch, 
+  onRejectMatch, 
+  onViewDetails,
+  isLoading = false 
 }: SmartSuggestionsProps) {
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [isExpanded, setIsExpanded] = useState(true);
-  const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(new Set());
-  const [isLoading, setIsLoading] = useState(false);
+  const [expandedMatch, setExpandedMatch] = useState<string | null>(null);
 
-  useEffect(() => {
-    generateSuggestions();
-  }, [currentData, currentLocation]);
-
-  const generateSuggestions = async () => {
-    if (!currentLocation) return;
-    
-    setIsLoading(true);
-    
-    try {
-      // Gerar sugestões baseadas na localização
-      const locationSuggestions = smartAutofillService.generateLocationBasedSuggestions(currentLocation);
-      
-      // Gerar sugestões baseadas em propriedades similares
-      const similarSuggestions = smartAutofillService.generateSimilarPropertySuggestions(currentData);
-      
-      // Combinar e filtrar sugestões duplicadas
-      const allSuggestions = [...locationSuggestions, ...similarSuggestions];
-      const uniqueSuggestions = allSuggestions.filter((suggestion, index, self) => 
-        index === self.findIndex(s => s.field === suggestion.field)
-      );
-      
-      // Filtrar apenas campos que ainda não foram preenchidos
-      const relevantSuggestions = uniqueSuggestions.filter(suggestion => {
-        const currentValue = currentData[suggestion.field];
-        return currentValue === undefined || currentValue === null || currentValue === "";
-      });
-      
-      setSuggestions(relevantSuggestions.slice(0, 5)); // Máximo 5 sugestões
-    } catch (error) {
-      console.warn('Erro ao gerar sugestões:', error);
-    } finally {
-      setIsLoading(false);
+  const getConfidenceColor = (confidence: string) => {
+    switch (confidence) {
+      case "Muito Alta": return "bg-green-100 text-green-800 border-green-200";
+      case "Alta": return "bg-blue-100 text-blue-800 border-blue-200";
+      case "Média": return "bg-yellow-100 text-yellow-800 border-yellow-200";
+      case "Baixa": return "bg-orange-100 text-orange-800 border-orange-200";
+      default: return "bg-gray-100 text-gray-800 border-gray-200";
     }
   };
 
-  const handleApplySuggestion = (suggestion: Suggestion) => {
-    onApplySuggestion(suggestion.field, suggestion.value);
-    setAppliedSuggestions(prev => new Set(Array.from(prev).concat(suggestion.field)));
-    
-    // Remover a sugestão aplicada da lista
-    setSuggestions(prev => prev.filter(s => s.field !== suggestion.field));
-  };
-
-  const handleDismissSuggestion = (field: string) => {
-    setSuggestions(prev => prev.filter(s => s.field !== field));
-  };
-
-  const getFieldLabel = (field: string): string => {
-    const labels: { [key: string]: string } = {
-      usoPredominante: 'Uso Predominante',
-      padraoConstrutivo: 'Padrão Construtivo',
-      numeroPavimentos: 'Número de Pavimentos',
-      areaConstruida: 'Área Construída',
-      areaTerreno: 'Área do Terreno',
-      agua: 'Água Encanada',
-      esgoto: 'Rede de Esgoto',
-      energia: 'Energia Elétrica',
-      iluminacaoPublica: 'Iluminação Pública',
-      coletaLixo: 'Coleta de Lixo',
-      meioFio: 'Meio-fio'
-    };
-    return labels[field] || field;
-  };
-
-  const formatValue = (field: string, value: any): string => {
-    if (typeof value === 'boolean') {
-      return value ? 'Sim' : 'Não';
+  const getReasonIcon = (type: string) => {
+    switch (type) {
+      case "exact_match": return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+      case "proximity": return <MapPin className="h-4 w-4 text-blue-600" />;
+      case "similarity": return <Brain className="h-4 w-4 text-purple-600" />;
+      default: return <FileText className="h-4 w-4 text-gray-600" />;
     }
-    if (field === 'areaConstruida' || field === 'areaTerreno') {
-      return `${value}m²`;
-    }
-    if (field === 'numeroPavimentos') {
-      return `${value} pavimento${value > 1 ? 's' : ''}`;
-    }
-    return String(value);
   };
 
-  const getConfidenceColor = (confidence: number): string => {
-    if (confidence >= 0.8) return 'bg-green-500';
-    if (confidence >= 0.6) return 'bg-blue-500';
-    return 'bg-amber-500';
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value);
   };
 
-  const getConfidenceLabel = (confidence: number): string => {
-    if (confidence >= 0.8) return 'Alta';
-    if (confidence >= 0.6) return 'Média';
-    return 'Baixa';
+  const formatArea = (area: number) => {
+    return `${area.toFixed(2)} m²`;
   };
 
-  if (suggestions.length === 0 && !isLoading) {
-    return null;
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Brain className="h-5 w-5 animate-pulse" />
+            <span>Analisando propriedades similares...</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="animate-pulse">
+                <div className="h-20 bg-muted rounded-lg"></div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (matches.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Brain className="h-5 w-5" />
+            <span>Sugestões Inteligentes</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Nenhuma propriedade similar encontrada na base municipal.
+              Esta pode ser uma propriedade nova ou os dados podem estar em formato diferente.
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
-    <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-blue/5">
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-3">
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Lightbulb className="h-5 w-5 text-primary" />
-            <h3 className="font-medium text-foreground">Sugestões Inteligentes</h3>
-            {suggestions.length > 0 && (
-              <Badge variant="secondary" className="text-xs">
-                {suggestions.length}
-              </Badge>
-            )}
+            <Brain className="h-5 w-5" />
+            <span>Sugestões Inteligentes</span>
+            <Badge variant="secondary">{matches.length} encontrada(s)</Badge>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="h-6 w-6 p-0"
-          >
-            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </Button>
-        </div>
+          {matches.some(m => m.autoApplied) && (
+            <div className="flex items-center space-x-1 text-green-600">
+              <Zap className="h-4 w-4" />
+              <span className="text-sm font-medium">Auto-aplicado</span>
+            </div>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {matches.map((match, index) => (
+          <div key={match.id} className="space-y-3">
+            <Card className="relative">
+              <CardContent className="p-4">
+                {/* Auto-applied indicator */}
+                {match.autoApplied && (
+                  <div className="absolute top-2 right-2">
+                    <Badge className="bg-green-100 text-green-800 border-green-200">
+                      <Zap className="h-3 w-3 mr-1" />
+                      Aplicado
+                    </Badge>
+                  </div>
+                )}
 
-        {isExpanded && (
-          <div className="space-y-3">
-            {isLoading && (
-              <Alert>
-                <Clock className="h-4 w-4" />
-                <AlertDescription className="text-sm">
-                  Analisando propriedades próximas para gerar sugestões...
-                </AlertDescription>
-              </Alert>
-            )}
+                {/* Header with confidence and score */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center space-x-2">
+                    <Badge className={getConfidenceColor(match.confidence)}>
+                      {match.confidence} ({Math.round(match.score * 100)}%)
+                    </Badge>
+                    <span className="text-sm text-muted-foreground">
+                      Inscrição: {match.municipalData.inscricaoImobiliaria}
+                    </span>
+                  </div>
+                </div>
 
-            {suggestions.map((suggestion, index) => (
-              <div key={`${suggestion.field}-${index}`} className="border rounded-lg p-3 bg-card/50">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <span className="text-sm font-medium">{getFieldLabel(suggestion.field)}</span>
-                      <div className="flex items-center space-x-1">
-                        <div className={`h-2 w-2 rounded-full ${getConfidenceColor(suggestion.confidence)}`}></div>
-                        <span className="text-xs text-muted-foreground">
-                          {getConfidenceLabel(suggestion.confidence)}
-                        </span>
-                      </div>
+                {/* Property info */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center space-x-2">
+                      <Home className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">
+                        {match.municipalData.logradouro}, {match.municipalData.numeroLogradouro}
+                      </span>
                     </div>
-                    <p className="text-sm font-semibold text-primary">
-                      {formatValue(suggestion.field, suggestion.value)}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {suggestion.reason}
-                    </p>
+                    <div className="flex items-center space-x-2">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        {match.municipalData.bairro}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center space-x-2">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">
+                        {match.municipalData.proprietarioNome}
+                      </span>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {match.municipalData.usoPredominante}
+                    </div>
                   </div>
                 </div>
-                
-                <div className="flex items-center space-x-2">
-                  <Button
-                    size="sm"
-                    onClick={() => handleApplySuggestion(suggestion)}
-                    className="flex-1"
-                    data-testid={`apply-suggestion-${suggestion.field}`}
-                  >
-                    <Check className="h-3 w-3 mr-1" />
-                    Aplicar
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleDismissSuggestion(suggestion.field)}
-                    className="px-3"
-                    data-testid={`dismiss-suggestion-${suggestion.field}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            ))}
 
-            {suggestions.length > 0 && (
-              <>
-                <Separator className="my-3" />
-                <div className="flex items-center space-x-2">
-                  <div className="flex items-center space-x-1">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">
-                      Baseado em {currentLocation ? 'propriedades próximas' : 'histórico similar'}
-                    </span>
+                {/* Property details */}
+                <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground mb-3">
+                  <div>
+                    <span className="font-medium">Terreno:</span> {formatArea(match.municipalData.areaTerreno)}
                   </div>
-                  <div className="flex items-center space-x-1">
-                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">
-                      Pode economizar até 3 minutos
-                    </span>
+                  <div>
+                    <span className="font-medium">Construída:</span> {formatArea(match.municipalData.areaConstruida)}
+                  </div>
+                  <div>
+                    <span className="font-medium">Valor:</span> {formatCurrency(match.municipalData.valorVenal)}
                   </div>
                 </div>
-              </>
-            )}
+
+                {/* Match reasons */}
+                <Collapsible 
+                  open={expandedMatch === match.id} 
+                  onOpenChange={() => setExpandedMatch(expandedMatch === match.id ? null : match.id)}
+                >
+                  <CollapsibleTrigger className="flex items-center space-x-2 text-sm text-primary hover:text-primary/80">
+                    {expandedMatch === match.id ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                    <span>Ver critérios de matching ({match.reasons.length})</span>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-3">
+                    <div className="space-y-2 bg-muted/50 p-3 rounded-lg">
+                      {match.reasons.map((reason, reasonIndex) => (
+                        <div key={reasonIndex} className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            {getReasonIcon(reason.type)}
+                            <span className="text-sm">{reason.description}</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs text-muted-foreground">
+                              {Math.round(reason.score * 100)}%
+                            </span>
+                            <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-primary transition-all duration-300"
+                                style={{ width: `${reason.score * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+
+                {/* Actions */}
+                {!match.autoApplied && (
+                  <div className="flex items-center space-x-2 mt-4">
+                    <Button
+                      size="sm"
+                      onClick={() => onApplyMatch(match.id, match.municipalDataId)}
+                      className="flex-1"
+                      data-testid={`button-apply-match-${index}`}
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-1" />
+                      Aplicar Dados
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onViewDetails(match.municipalData)}
+                      data-testid={`button-view-details-${index}`}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      Detalhes
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => onRejectMatch(match.id)}
+                      data-testid={`button-reject-match-${index}`}
+                    >
+                      <XCircle className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+
+                {match.autoApplied && (
+                  <div className="mt-4 p-2 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center space-x-2 text-green-700">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span className="text-sm font-medium">
+                        Dados aplicados automaticamente devido à alta confiança
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            
+            {index < matches.length - 1 && <Separator />}
           </div>
-        )}
+        ))}
+
+        {/* Summary */}
+        <Alert>
+          <Brain className="h-4 w-4" />
+          <AlertDescription>
+            <div className="space-y-1">
+              <p className="font-medium">Como funciona o matching inteligente:</p>
+              <ul className="text-sm space-y-1 ml-4">
+                <li>• <strong>Muito Alta:</strong> Auto-aplicado (95%+ confiança)</li>
+                <li>• <strong>Alta:</strong> Recomendado para aplicação (85%+ confiança)</li>
+                <li>• <strong>Média:</strong> Revisar antes de aplicar (65%+ confiança)</li>
+                <li>• <strong>Baixa:</strong> Verificar dados manualmente (40%+ confiança)</li>
+              </ul>
+            </div>
+          </AlertDescription>
+        </Alert>
       </CardContent>
     </Card>
   );

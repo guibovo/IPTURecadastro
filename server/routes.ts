@@ -296,6 +296,152 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Municipal data management routes
+  app.post('/api/municipal-data/upload', isAuthenticated, upload.single('file'), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const { municipio, fonte } = req.body;
+      const file = req.file;
+
+      if (!file || !municipio || !fonte) {
+        return res.status(400).json({ message: "File, município and fonte are required" });
+      }
+
+      const { aiPropertyMatcher } = await import('./aiMatcher');
+      const result = await storage.processMunicipalDataFile(file, municipio, fonte);
+      
+      // Audit log
+      await storage.createAuditLog({
+        userId,
+        action: 'upload',
+        entity: 'municipal_data',
+        entityId: 'bulk',
+        changes: { municipio, fonte, filename: file.originalname, result },
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error uploading municipal data:", error);
+      res.status(500).json({ message: "Failed to upload municipal data" });
+    }
+  });
+
+  app.get('/api/municipal-data', isAuthenticated, async (req, res) => {
+    try {
+      const { municipio, page = 1, limit = 50 } = req.query;
+      const municipalData = await storage.getMunicipalData(municipio as string, Number(page), Number(limit));
+      res.json(municipalData);
+    } catch (error) {
+      console.error("Error fetching municipal data:", error);
+      res.status(500).json({ message: "Failed to fetch municipal data" });
+    }
+  });
+
+  app.post('/api/property-collections/:id/find-matches', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const collection = await storage.getPropertyCollectionById(id);
+      
+      if (!collection) {
+        return res.status(404).json({ message: "Property collection not found" });
+      }
+
+      const { aiPropertyMatcher } = await import('./aiMatcher');
+      const formResponses = collection.formResponses as Record<string, any> || {};
+      const propertyData = {
+        ...formResponses,
+        latitude: collection.latitude ? parseFloat(collection.latitude.toString()) : undefined,
+        longitude: collection.longitude ? parseFloat(collection.longitude.toString()) : undefined,
+      };
+
+      // Assumir São Paulo como padrão se não especificado
+      const matches = await aiPropertyMatcher.findMatches(propertyData, 'SP');
+      
+      // Salvar matches encontrados
+      for (const match of matches) {
+        await aiPropertyMatcher.saveMatch(
+          id, 
+          match.municipalDataId, 
+          match.score, 
+          match.reasons,
+          true // permitir auto-aplicação
+        );
+      }
+
+      const mappedMatches = matches.map(match => ({
+        id: `${id}-${match.municipalDataId}`,
+        municipalDataId: match.municipalDataId,
+        score: match.score,
+        confidence: aiPropertyMatcher.getConfidenceLevel(match.score),
+        reasons: match.reasons,
+        autoApplied: match.score >= 0.95,
+        municipalData: match.municipalData
+      }));
+
+      res.json(mappedMatches);
+    } catch (error) {
+      console.error("Error finding property matches:", error);
+      res.status(500).json({ message: "Failed to find property matches" });
+    }
+  });
+
+  app.post('/api/property-matches/:id/apply', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { municipalDataId } = req.body;
+      const userId = req.user.claims.sub;
+
+      const municipalData = await storage.getMunicipalDataById(municipalDataId);
+      if (!municipalData) {
+        return res.status(404).json({ message: "Municipal data not found" });
+      }
+
+      // Aplicar dados municipais na collection
+      const appliedFields = await storage.applyMunicipalDataToCollection(id, municipalDataId);
+      
+      // Registrar aplicação
+      await storage.recordMunicipalDataApplication(id, municipalDataId, appliedFields, userId);
+      
+      // Atualizar status do match
+      await storage.updatePropertyMatchStatus(id, municipalDataId, 'confirmed', userId);
+
+      // Audit log
+      await storage.createAuditLog({
+        userId,
+        action: 'apply_municipal_data',
+        entity: 'property_collection',
+        entityId: id,
+        changes: { municipalDataId, appliedFields },
+      });
+
+      res.json({ success: true, appliedFields });
+    } catch (error) {
+      console.error("Error applying municipal data:", error);
+      res.status(500).json({ message: "Failed to apply municipal data" });
+    }
+  });
+
+  app.post('/api/property-matches/:id/reject', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { municipalDataId } = req.body;
+      const userId = req.user.claims.sub;
+
+      await storage.updatePropertyMatchStatus(id, municipalDataId, 'rejected', userId);
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error rejecting property match:", error);
+      res.status(500).json({ message: "Failed to reject property match" });
+    }
+  });
+
   // Photo management routes
   app.post('/api/photos/upload-url', isAuthenticated, async (req, res) => {
     try {

@@ -168,6 +168,61 @@ export const auditLog = pgTable("audit_log", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Dados municipais importados (BIC/IPTU)
+export const municipalData = pgTable("municipal_data", {
+  id: pgUuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  inscricaoImobiliaria: varchar("inscricao_imobiliaria").notNull(),
+  numeroLogradouro: varchar("numero_logradouro"),
+  complemento: varchar("complemento"),
+  logradouro: varchar("logradouro"),
+  bairro: varchar("bairro"),
+  cep: varchar("cep"),
+  usoPredominante: varchar("uso_predominante"),
+  areaTerreno: decimal("area_terreno", { precision: 10, scale: 2 }),
+  areaConstruida: decimal("area_construida", { precision: 10, scale: 2 }),
+  numeroPavimentos: integer("numero_pavimentos"),
+  padraoConstrutivo: varchar("padrao_construtivo"),
+  anoConstrucao: integer("ano_construcao"),
+  proprietarioNome: varchar("proprietario_nome"),
+  proprietarioCpfCnpj: varchar("proprietario_cpf_cnpj"),
+  telefone: varchar("telefone"),
+  valorVenal: decimal("valor_venal", { precision: 12, scale: 2 }),
+  valorIptu: decimal("valor_iptu", { precision: 12, scale: 2 }),
+  situacao: varchar("situacao").default("ativo"), // ativo, inativo, pendente
+  latitude: decimal("latitude", { precision: 10, scale: 8 }),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }),
+  observacoes: text("observacoes"),
+  dataImportacao: timestamp("data_importacao").defaultNow(),
+  fonte: varchar("fonte").notNull(), // BIC, IPTU, outro
+  municipio: varchar("municipio").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Matching de propriedades (IA para identificar duplicatas)
+export const propertyMatches = pgTable("property_matches", {
+  id: pgUuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  collectionId: pgUuid("collection_id").references(() => propertyCollections.id),
+  municipalDataId: pgUuid("municipal_data_id").references(() => municipalData.id),
+  matchScore: decimal("match_score", { precision: 3, scale: 2 }).notNull(), // 0.00 to 1.00
+  matchReasons: jsonb("match_reasons").notNull(), // array de critérios de matching
+  status: varchar("status").default("pending"), // pending, confirmed, rejected, auto_applied
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  autoApplied: boolean("auto_applied").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Histórico de aplicação de dados municipais
+export const municipalDataApplications = pgTable("municipal_data_applications", {
+  id: pgUuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  collectionId: pgUuid("collection_id").references(() => propertyCollections.id),
+  municipalDataId: pgUuid("municipal_data_id").references(() => municipalData.id),
+  appliedFields: jsonb("applied_fields").notNull(), // campos que foram aplicados
+  appliedBy: varchar("applied_by").references(() => users.id),
+  appliedAt: timestamp("applied_at").defaultNow(),
+});
+
 // Relations
 export const userRelations = relations(users, ({ many }) => ({
   missions: many(missions),
@@ -262,6 +317,15 @@ export type SyncQueue = typeof syncQueue.$inferSelect;
 export type InsertAuditLog = typeof auditLog.$inferInsert;
 export type AuditLog = typeof auditLog.$inferSelect;
 
+export type InsertMunicipalData = typeof municipalData.$inferInsert;
+export type MunicipalData = typeof municipalData.$inferSelect;
+
+export type InsertPropertyMatch = typeof propertyMatches.$inferInsert;
+export type PropertyMatch = typeof propertyMatches.$inferSelect;
+
+export type InsertMunicipalDataApplication = typeof municipalDataApplications.$inferInsert;
+export type MunicipalDataApplication = typeof municipalDataApplications.$inferSelect;
+
 // Insert schemas for validation
 export const insertFormSchema = createInsertSchema(forms).omit({
   id: true,
@@ -288,4 +352,21 @@ export const insertPhotoSchema = createInsertSchema(photos).omit({
 export const insertShapefileLayerSchema = createInsertSchema(shapefileLayers).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertMunicipalDataSchema = createInsertSchema(municipalData).omit({
+  id: true,
+  dataImportacao: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPropertyMatchSchema = createInsertSchema(propertyMatches).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMunicipalDataApplicationSchema = createInsertSchema(municipalDataApplications).omit({
+  id: true,
+  appliedAt: true,
 });
