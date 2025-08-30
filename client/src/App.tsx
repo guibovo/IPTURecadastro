@@ -19,6 +19,7 @@ import Features from "@/pages/Features";
 import ProductivityFeatures from "@/pages/ProductivityFeatures";
 import MunicipalDataPage from "@/pages/MunicipalDataPage";
 import NotFound from "@/pages/not-found";
+import LocalLogin from "@/pages/LocalLogin";
 
 function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -61,6 +62,7 @@ function Router() {
           )}
         </>
       )}
+      <Route path="/local-login" component={LocalLogin} />
       <Route component={NotFound} />
     </Switch>
   );

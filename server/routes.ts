@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupLocalAuth } from "./localAuth";
 import { ObjectStorageService } from "./objectStorage";
 import { bicPatternLearningService } from "./bicPatternLearning";
 import multer from "multer";
@@ -15,7 +16,8 @@ const upload = multer({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth middleware
+  // Auth middleware - setup both Replit and local auth
+  setupLocalAuth(app);
   await setupAuth(app);
 
   // Auth routes

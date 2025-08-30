@@ -1,13 +1,12 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Home, Loader2 } from "lucide-react";
+import { Home, Loader2, Shield } from "lucide-react";
 
 export default function Landing() {
   const [isLoading, setIsLoading] = useState(false);
+  const [, setLocation] = useLocation();
 
   const handleLogin = () => {
     setIsLoading(true);
@@ -27,38 +26,7 @@ export default function Landing() {
             <p className="text-muted-foreground mt-2">Sistema Municipal de Coleta</p>
           </div>
           
-          <div className="space-y-6">
-            <div>
-              <Label htmlFor="email" className="block text-sm font-medium text-card-foreground mb-2">
-                E-mail
-              </Label>
-              <Input 
-                id="email"
-                type="email" 
-                placeholder="usuario@exemplo.com.br"
-                data-testid="input-email"
-              />
-            </div>
-            
-            <div>
-              <Label htmlFor="password" className="block text-sm font-medium text-card-foreground mb-2">
-                Senha
-              </Label>
-              <Input 
-                id="password"
-                type="password" 
-                placeholder="••••••••"
-                data-testid="input-password"
-              />
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <Checkbox id="remember" data-testid="checkbox-remember" />
-              <Label htmlFor="remember" className="text-sm text-muted-foreground">
-                Lembrar de mim
-              </Label>
-            </div>
-            
+          <div className="space-y-4">
             <Button 
               onClick={handleLogin}
               disabled={isLoading}
@@ -71,9 +39,23 @@ export default function Landing() {
                   Entrando...
                 </>
               ) : (
-                "Entrar"
+                "Entrar com Replit"
               )}
             </Button>
+            
+            <Button 
+              variant="outline"
+              onClick={() => setLocation('/local-login')}
+              className="w-full"
+              data-testid="button-admin-login"
+            >
+              <Shield className="w-4 h-4 mr-2" />
+              Acesso Administrativo
+            </Button>
+            
+            <div className="text-center text-sm text-muted-foreground">
+              Faça login usando sua conta Replit para acessar o sistema
+            </div>
           </div>
           
           <div className="mt-6 text-center">
