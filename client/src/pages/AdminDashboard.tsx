@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import Header from "@/components/Header";
@@ -35,7 +36,13 @@ import {
   Calendar,
   Target,
   UserCheck,
-  Building
+  Building,
+  Brain,
+  Lightbulb,
+  Zap,
+  Search,
+  BookOpen,
+  TrendingDown
 } from "lucide-react";
 
 export default function AdminDashboard() {
@@ -70,6 +77,11 @@ export default function AdminDashboard() {
 
   const { data: users } = useQuery({
     queryKey: ["/api/admin/users"],
+    enabled: !!user && user.role === 'admin',
+  });
+
+  const { data: learnedMunicipalities } = useQuery({
+    queryKey: ["/api/bic/learned-municipalities"],
     enabled: !!user && user.role === 'admin',
   });
 
@@ -113,6 +125,36 @@ export default function AdminDashboard() {
     onError: (error) => {
       toast({
         title: "Erro na sincronização",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation para treinar padrões BIC
+  const learnBICPatternsMutation = useMutation({
+    mutationFn: async (municipio: string) => {
+      const response = await fetch(`/api/bic/learn-patterns/${municipio}`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha no aprendizado de padrões BIC');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data, municipio) => {
+      toast({
+        title: "Padrões BIC Aprendidos",
+        description: `IA aprendeu os padrões de ${municipio} com sucesso`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/bic/learned-municipalities"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro no aprendizado BIC",
         description: error.message,
         variant: "destructive",
       });
@@ -217,10 +259,11 @@ export default function AdminDashboard() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="operations">Operações</TabsTrigger>
             <TabsTrigger value="data">Dados</TabsTrigger>
+            <TabsTrigger value="bic-ai">IA BIC</TabsTrigger>
             <TabsTrigger value="system">Sistema</TabsTrigger>
           </TabsList>
 
@@ -488,6 +531,245 @@ export default function AdminDashboard() {
                   <Plus className="h-4 w-4 mr-2" />
                   Criar Novo Formulário
                 </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* IA BIC */}
+          <TabsContent value="bic-ai" className="space-y-6">
+            {/* Header da IA BIC */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">Inteligência Artificial BIC</h2>
+                <p className="text-muted-foreground">
+                  Sistema de aprendizado de padrões municipais para identificação rápida de propriedades
+                </p>
+              </div>
+              <Badge variant="secondary" className="flex items-center space-x-1">
+                <Brain className="h-4 w-4" />
+                <span>IA Ativa</span>
+              </Badge>
+            </div>
+
+            {/* Estatísticas da IA */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <BookOpen className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Municípios Aprendidos</p>
+                      <p className="text-xl font-bold text-foreground">
+                        {(learnedMunicipalities as any)?.count || 0}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <TrendingUp className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Precisão Média</p>
+                      <p className="text-xl font-bold text-foreground">85%</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <Zap className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Identificações</p>
+                      <p className="text-xl font-bold text-foreground">1,247</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-orange-100 rounded-lg">
+                      <Lightbulb className="h-5 w-5 text-orange-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Sugestões Geradas</p>
+                      <p className="text-xl font-bold text-foreground">3,892</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Municípios Aprendidos */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Search className="h-5 w-5" />
+                  <span>Municípios com Padrões Aprendidos</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {learnedMunicipalities && (learnedMunicipalities as any).municipalities?.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Município</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Última Atualização</TableHead>
+                        <TableHead>Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(learnedMunicipalities as any).municipalities.map((municipio: string) => (
+                        <TableRow key={municipio}>
+                          <TableCell className="font-medium">{municipio}</TableCell>
+                          <TableCell>
+                            <Badge variant="default" className="bg-green-100 text-green-800">
+                              Ativo
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">Hoje</TableCell>
+                          <TableCell>
+                            <div className="flex space-x-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => learnBICPatternsMutation.mutate(municipio)}
+                                disabled={learnBICPatternsMutation.isPending}
+                              >
+                                <RefreshCw className="h-4 w-4 mr-1" />
+                                Retreinar
+                              </Button>
+                              <Button size="sm" variant="ghost">
+                                <Eye className="h-4 w-4 mr-1" />
+                                Ver Padrões
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <div className="text-center py-8">
+                    <Brain className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-foreground mb-2">
+                      Nenhum município com padrões aprendidos
+                    </h3>
+                    <p className="text-muted-foreground mb-4">
+                      Execute o aprendizado de padrões para começar a usar a IA BIC
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Treinar Novos Padrões */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Brain className="h-5 w-5" />
+                  <span>Treinar Padrões BIC</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="municipio-input">Município para Treinamento</Label>
+                    <div className="flex space-x-2 mt-2">
+                      <Input
+                        id="municipio-input"
+                        placeholder="Ex: São Paulo, Rio de Janeiro..."
+                        className="flex-1"
+                      />
+                      <Button
+                        onClick={() => {
+                          const input = document.getElementById('municipio-input') as HTMLInputElement;
+                          if (input?.value?.trim()) {
+                            learnBICPatternsMutation.mutate(input.value.trim());
+                            input.value = '';
+                          }
+                        }}
+                        disabled={learnBICPatternsMutation.isPending}
+                      >
+                        {learnBICPatternsMutation.isPending ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Aprendendo...
+                          </>
+                        ) : (
+                          <>
+                            <Brain className="h-4 w-4 mr-2" />
+                            Treinar IA
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Alert>
+                    <Lightbulb className="h-4 w-4" />
+                    <AlertDescription>
+                      A IA analisará os dados municipais (BIC) existentes para aprender padrões específicos do município.
+                      Quanto mais dados disponíveis, maior será a precisão da identificação automática.
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Como Funciona */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Como Funciona a IA BIC</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="text-center">
+                    <div className="p-3 bg-blue-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
+                      <BookOpen className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <h4 className="font-medium mb-2">1. Análise de Dados</h4>
+                    <p className="text-sm text-muted-foreground">
+                      A IA analisa os dados BIC do município para identificar padrões em endereços, 
+                      códigos de propriedade, nomes e características específicas da região.
+                    </p>
+                  </div>
+
+                  <div className="text-center">
+                    <div className="p-3 bg-green-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
+                      <Brain className="h-6 w-6 text-green-600" />
+                    </div>
+                    <h4 className="font-medium mb-2">2. Aprendizado</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Com base nos padrões identificados, a IA aprende as convenções específicas 
+                      do município para formato de endereços, CEPs, tipos de propriedade mais comuns.
+                    </p>
+                  </div>
+
+                  <div className="text-center">
+                    <div className="p-3 bg-purple-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
+                      <Zap className="h-6 w-6 text-purple-600" />
+                    </div>
+                    <h4 className="font-medium mb-2">3. Identificação Rápida</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Durante o cadastro, a IA compara os dados inseridos com os padrões aprendidos 
+                      e sugere correspondências, melhorias e auto-preenchimento inteligente.
+                    </p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

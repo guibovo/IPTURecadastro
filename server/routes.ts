@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { ObjectStorageService } from "./objectStorage";
+import { bicPatternLearningService } from "./bicPatternLearning";
 import multer from "multer";
 import { z } from "zod";
 import { insertFormSchema, insertMissionSchema, insertPropertyCollectionSchema, insertPhotoSchema } from "@shared/schema";
@@ -158,6 +159,159 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error syncing system:", error);
       res.status(500).json({ message: "Failed to sync system" });
+    }
+  });
+
+  // BIC Pattern Learning Routes
+  app.post('/api/bic/learn-patterns/:municipio', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const { municipio } = req.params;
+      
+      // Executar análise e aprendizado de padrões
+      const pattern = await bicPatternLearningService.analyzeAndLearnPatterns(municipio);
+      
+      // Log da ação
+      await storage.createAuditLog({
+        userId,
+        action: 'learn_patterns',
+        entity: 'bic_patterns',
+        entityId: municipio,
+        changes: { 
+          sampleSize: pattern.sampleSize,
+          confidence: pattern.confidence,
+          timestamp: new Date().toISOString()
+        },
+      });
+
+      res.json({
+        message: `Padrões BIC aprendidos com sucesso para ${municipio}`,
+        pattern: {
+          municipio: pattern.municipio,
+          confidence: pattern.confidence,
+          sampleSize: pattern.sampleSize,
+          lastUpdated: pattern.lastUpdated,
+          patternTypes: Object.keys(pattern.patterns),
+        }
+      });
+    } catch (error) {
+      console.error("Error learning BIC patterns:", error);
+      res.status(500).json({ 
+        message: "Failed to learn BIC patterns", 
+        error: error.message 
+      });
+    }
+  });
+
+  app.post('/api/bic/identify-property', isAuthenticated, async (req: any, res) => {
+    try {
+      const { municipio, propertyData } = req.body;
+      
+      if (!municipio || !propertyData) {
+        return res.status(400).json({ message: "Municipality and property data are required" });
+      }
+
+      // Identificar propriedade usando padrões aprendidos
+      const result = await bicPatternLearningService.identifyProperty(municipio, propertyData);
+      
+      res.json({
+        message: "Property identification completed",
+        result
+      });
+    } catch (error) {
+      console.error("Error identifying property:", error);
+      res.status(500).json({ 
+        message: "Failed to identify property", 
+        error: error.message 
+      });
+    }
+  });
+
+  app.post('/api/bic/cadastro-suggestions', isAuthenticated, async (req: any, res) => {
+    try {
+      const { municipio, partialData } = req.body;
+      
+      if (!municipio || !partialData) {
+        return res.status(400).json({ message: "Municipality and partial data are required" });
+      }
+
+      // Obter sugestões para melhorar o cadastro
+      const suggestions = await bicPatternLearningService.provideCadastroSuggestions(municipio, partialData);
+      
+      res.json({
+        message: "Cadastro suggestions generated",
+        suggestions
+      });
+    } catch (error) {
+      console.error("Error generating cadastro suggestions:", error);
+      res.status(500).json({ 
+        message: "Failed to generate suggestions", 
+        error: error.message 
+      });
+    }
+  });
+
+  app.get('/api/bic/patterns/:municipio', isAuthenticated, async (req: any, res) => {
+    try {
+      const { municipio } = req.params;
+      
+      // Obter padrões aprendidos para o município
+      const pattern = bicPatternLearningService.getPatternForMunicipality(municipio);
+      
+      if (!pattern) {
+        return res.status(404).json({ 
+          message: `No patterns found for municipality ${municipio}. Run pattern learning first.` 
+        });
+      }
+
+      res.json({
+        message: `BIC patterns for ${municipio}`,
+        pattern: {
+          municipio: pattern.municipio,
+          confidence: pattern.confidence,
+          sampleSize: pattern.sampleSize,
+          lastUpdated: pattern.lastUpdated,
+          patterns: pattern.patterns,
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching BIC patterns:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch BIC patterns", 
+        error: error.message 
+      });
+    }
+  });
+
+  app.get('/api/bic/learned-municipalities', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Listar municípios com padrões aprendidos
+      const municipalities = bicPatternLearningService.getLearnedMunicipalities();
+      
+      res.json({
+        message: "Learned municipalities",
+        municipalities,
+        count: municipalities.length
+      });
+    } catch (error) {
+      console.error("Error fetching learned municipalities:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch learned municipalities", 
+        error: error.message 
+      });
     }
   });
 

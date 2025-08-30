@@ -17,6 +17,7 @@ import PropertyTemplates from "@/components/PropertyTemplates";
 import SmartSuggestions from "@/components/SmartSuggestions";
 import PropertyDuplicator from "@/components/PropertyDuplicator";
 import KeyboardShortcuts from "@/components/KeyboardShortcuts";
+import BICSmartAssistant from "@/components/BICSmartAssistant";
 import { 
   ArrowLeft, 
   Save, 
@@ -469,6 +470,22 @@ export default function PropertyForm() {
           currentLocation={currentGPS}
           onApplySuggestion={handleApplySuggestion}
         />
+
+        {/* BIC Smart Assistant */}
+        {mission?.municipio && (
+          <BICSmartAssistant
+            municipio={mission.municipio}
+            currentPropertyData={form.getValues()}
+            onApplySuggestion={handleApplySuggestion}
+            onSelectMatch={(matchData) => {
+              // Implementar lógica para aplicar dados da correspondência BIC
+              toast({
+                title: "Correspondência BIC Encontrada",
+                description: `Registro BIC ${matchData.bicId} com ${Math.round(matchData.overallScore * 100)}% de similaridade`,
+              });
+            }}
+          />
+        )}
 
         <DynamicForm 
           form={form}
