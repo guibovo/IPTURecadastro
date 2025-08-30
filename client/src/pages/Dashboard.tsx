@@ -171,6 +171,16 @@ export default function Dashboard() {
           </Button>
           
           <Button 
+            onClick={() => setLocation("/location-tracking")}
+            variant="outline"
+            className="p-4 h-auto flex flex-col items-center space-y-2"
+            data-testid="button-location-tracking"
+          >
+            <Navigation className="h-6 w-6" />
+            <span className="text-sm font-medium">Rastreamento</span>
+          </Button>
+          
+          <Button 
             variant="ghost"
             className="p-4 h-auto flex flex-col items-center space-y-2"
             data-testid="button-reports"

@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import Header from "@/components/Header";
 import BottomNavigation from "@/components/BottomNavigation";
-import MapComponent from "@/components/MapComponent";
+import OfflineMapComponent from "@/components/OfflineMapComponent";
 import { 
   ArrowLeft, 
   Search, 
@@ -104,9 +104,10 @@ export default function Map() {
 
       {/* Map Container */}
       <div className="relative h-96">
-        <MapComponent 
+        <OfflineMapComponent 
           missions={filteredMissions || []}
           selectedLayers={selectedLayers}
+          enableOfflineMode={true}
         />
         
         {/* GPS Accuracy Indicator */}

@@ -317,6 +317,18 @@ export default function Admin() {
                   <div className="text-xs opacity-80">Criar e editar questionários</div>
                 </div>
               </Button>
+              
+              <Button 
+                onClick={() => setLocation("/offline-maps")}
+                className="w-full bg-orange-600 text-white h-auto py-4 text-left flex items-center justify-start"
+                data-testid="button-offline-maps"
+              >
+                <MapPin className="h-5 w-5 mr-3" />
+                <div>
+                  <div className="font-medium">Mapas Offline</div>
+                  <div className="text-xs opacity-80">Gerenciar cache de mapas para trabalho offline</div>
+                </div>
+              </Button>
             </div>
 
             {/* Recent Activity */}

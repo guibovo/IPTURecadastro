@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import DynamicForm from "@/components/DynamicForm";
 import PhotoCapture from "@/components/PhotoCapture";
+import OCRScanner from "@/components/OCRScanner";
 import { 
   ArrowLeft, 
   Save, 
@@ -54,6 +55,7 @@ export default function PropertyForm() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [progress, setProgress] = useState(0);
   const [currentGPS, setCurrentGPS] = useState<{latitude: number, longitude: number, accuracy?: number} | null>(null);
+  const [showOCRScanner, setShowOCRScanner] = useState(false);
 
   const form = useForm<PropertyFormData>({
     resolver: zodResolver(propertyFormSchema),
@@ -262,6 +264,18 @@ export default function PropertyForm() {
     }
   };
 
+  const handleOCRNumberDetected = (numbers: string[]) => {
+    if (numbers.length > 0) {
+      const detectedNumber = numbers[0]; // Use the first detected number
+      form.setValue('numero', detectedNumber);
+      setShowOCRScanner(false);
+      toast({
+        title: "Número detectado!",
+        description: `Número ${detectedNumber} adicionado ao formulário`,
+      });
+    }
+  };
+
   const updateGPS = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -394,6 +408,30 @@ export default function PropertyForm() {
             queryClient.invalidateQueries({ queryKey: ["/api/photos/mission", missionId] });
           }}
         />
+
+        {/* OCR Scanner for House Numbers */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-medium text-card-foreground">Reconhecimento de Números</h2>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowOCRScanner(!showOCRScanner)}
+                data-testid="button-toggle-ocr"
+              >
+                {showOCRScanner ? 'Ocultar' : 'Usar OCR'}
+              </Button>
+            </div>
+            
+            {showOCRScanner && (
+              <OCRScanner
+                onNumberDetected={handleOCRNumberDetected}
+                defaultNumber={form.getValues('numero')}
+              />
+            )}
+          </CardContent>
+        </Card>
 
         {/* GPS Location */}
         <Card>

@@ -4,13 +4,14 @@ import {
   Map as MapIcon, 
   ListTodo, 
   CloudUpload,
-  Settings
+  Settings,
+  Star
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 
 interface BottomNavigationProps {
-  currentPage: "dashboard" | "map" | "missions" | "sync" | "admin";
+  currentPage: "dashboard" | "map" | "missions" | "sync" | "admin" | "features";
 }
 
 export default function BottomNavigation({ currentPage }: BottomNavigationProps) {
@@ -42,6 +43,12 @@ export default function BottomNavigation({ currentPage }: BottomNavigationProps)
       icon: CloudUpload,
       path: "/sync",
     },
+    {
+      id: "features",
+      label: "Recursos",
+      icon: Star,
+      path: "/features",
+    },
   ];
 
   // Add admin tab for admin users
@@ -55,8 +62,8 @@ export default function BottomNavigation({ currentPage }: BottomNavigationProps)
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
-      <div className={`grid h-16 ${navItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
+    <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 shadow-lg">
+      <div className={`grid h-20 ${navItems.length >= 6 ? 'grid-cols-5' : navItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
         {navItems.map((item) => {
           const isActive = currentPage === item.id;
           return (
@@ -64,13 +71,15 @@ export default function BottomNavigation({ currentPage }: BottomNavigationProps)
               key={item.id}
               variant="ghost"
               onClick={() => setLocation(item.path)}
-              className={`flex flex-col items-center justify-center space-y-1 h-full rounded-none ${
-                isActive ? "text-primary" : "text-muted-foreground hover:text-primary"
+              className={`flex flex-col items-center justify-center space-y-1 h-full rounded-none min-h-[44px] ${
+                isActive 
+                  ? "text-primary bg-primary/10 border-t-2 border-t-primary" 
+                  : "text-muted-foreground hover:text-primary hover:bg-primary/5"
               }`}
               data-testid={`nav-${item.id}`}
             >
-              <item.icon className="h-5 w-5" />
-              <span className="text-xs">{item.label}</span>
+              <item.icon className={`${isActive ? 'h-6 w-6' : 'h-5 w-5'} transition-all`} />
+              <span className={`text-xs ${isActive ? 'font-medium' : ''}`}>{item.label}</span>
             </Button>
           );
         })}

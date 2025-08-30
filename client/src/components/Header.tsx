@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/contexts/ThemeContext";
 import { 
   Home, 
   User, 
@@ -10,7 +11,10 @@ import {
   LogOut,
   Wifi,
   WifiOff,
-  Satellite
+  Satellite,
+  Sun,
+  Moon,
+  Monitor
 } from "lucide-react";
 
 interface UserType {
@@ -22,25 +26,12 @@ interface UserType {
 }
 
 export default function Header() {
-  const { user } = useAuth() as { user: UserType | null | undefined };
+  const { user, isOnline, isOfflineMode } = useAuth();
+  const { theme, setTheme, isDark } = useTheme();
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Monitor online status
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
 
   // Get GPS accuracy
   useEffect(() => {
@@ -92,6 +83,13 @@ export default function Header() {
         </div>
         
         <div className="flex items-center space-x-2">
+          {/* Offline Mode Indicator */}
+          {isOfflineMode && (
+            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800">
+              Modo Offline
+            </Badge>
+          )}
+          
           {/* Connectivity Status */}
           <div className="flex items-center space-x-1">
             {isOnline ? (
@@ -152,7 +150,7 @@ export default function Header() {
                   {user?.role === "admin" && (
                     <Button 
                       variant="ghost" 
-                      className="w-full justify-start text-sm"
+                      className="w-full justify-start text-sm h-12"
                       onClick={() => {
                         setShowUserMenu(false);
                         window.location.href = "/admin";
@@ -163,9 +161,44 @@ export default function Header() {
                       Painel Administrativo
                     </Button>
                   )}
+                  
+                  {/* Theme Selector */}
+                  <div className="px-3 py-2 border-b border-border">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Tema</p>
+                    <div className="flex space-x-1">
+                      <Button 
+                        variant={theme === 'light' ? 'default' : 'ghost'}
+                        size="sm"
+                        className="flex-1 h-10"
+                        onClick={() => setTheme('light')}
+                        data-testid="button-theme-light"
+                      >
+                        <Sun className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant={theme === 'dark' ? 'default' : 'ghost'}
+                        size="sm"
+                        className="flex-1 h-10"
+                        onClick={() => setTheme('dark')}
+                        data-testid="button-theme-dark"
+                      >
+                        <Moon className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant={theme === 'system' ? 'default' : 'ghost'}
+                        size="sm"
+                        className="flex-1 h-10"
+                        onClick={() => setTheme('system')}
+                        data-testid="button-theme-system"
+                      >
+                        <Monitor className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  
                   <Button 
                     variant="ghost" 
-                    className="w-full justify-start text-sm"
+                    className="w-full justify-start text-sm h-12"
                     onClick={() => {
                       setShowUserMenu(false);
                     }}
@@ -176,7 +209,7 @@ export default function Header() {
                   </Button>
                   <Button 
                     variant="ghost" 
-                    className="w-full justify-start text-sm text-red-600 hover:text-red-600"
+                    className="w-full justify-start text-sm h-12 text-red-600 hover:text-red-600"
                     onClick={() => {
                       setShowUserMenu(false);
                       handleLogout();
