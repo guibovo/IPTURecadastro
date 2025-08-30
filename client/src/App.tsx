@@ -12,6 +12,7 @@ import Missions from "@/pages/Missions";
 import PropertyForm from "@/pages/PropertyForm";
 import Sync from "@/pages/Sync";
 import Admin from "@/pages/Admin";
+import AdminDashboard from "@/pages/AdminDashboard";
 import OfflineMaps from "@/pages/OfflineMaps";
 import LocationTracking from "@/pages/LocationTracking";
 import Features from "@/pages/Features";
@@ -20,7 +21,7 @@ import MunicipalDataPage from "@/pages/MunicipalDataPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   return (
     <Switch>
@@ -28,17 +29,36 @@ function Router() {
         <Route path="/" component={Landing} />
       ) : (
         <>
-          <Route path="/" component={Dashboard} />
-          <Route path="/map" component={Map} />
-          <Route path="/missions" component={Missions} />
-          <Route path="/missions/:id/form" component={PropertyForm} />
-          <Route path="/sync" component={Sync} />
-          <Route path="/admin" component={Admin} />
-          <Route path="/offline-maps" component={OfflineMaps} />
-          <Route path="/location-tracking" component={LocationTracking} />
-          <Route path="/features" component={Features} />
-          <Route path="/productivity" component={ProductivityFeatures} />
-          <Route path="/admin/municipal-data" component={MunicipalDataPage} />
+          {/* Direcionar administradores para o dashboard administrativo */}
+          {user?.role === 'admin' ? (
+            <>
+              <Route path="/" component={AdminDashboard} />
+              <Route path="/admin-dashboard" component={AdminDashboard} />
+              <Route path="/admin" component={Admin} />
+              <Route path="/admin/municipal-data" component={MunicipalDataPage} />
+              <Route path="/map" component={Map} />
+              <Route path="/missions" component={Missions} />
+              <Route path="/missions/:id/form" component={PropertyForm} />
+              <Route path="/sync" component={Sync} />
+              <Route path="/offline-maps" component={OfflineMaps} />
+              <Route path="/location-tracking" component={LocationTracking} />
+              <Route path="/features" component={Features} />
+              <Route path="/productivity" component={ProductivityFeatures} />
+            </>
+          ) : (
+            <>
+              {/* Rotas para agentes de campo */}
+              <Route path="/" component={Dashboard} />
+              <Route path="/map" component={Map} />
+              <Route path="/missions" component={Missions} />
+              <Route path="/missions/:id/form" component={PropertyForm} />
+              <Route path="/sync" component={Sync} />
+              <Route path="/offline-maps" component={OfflineMaps} />
+              <Route path="/location-tracking" component={LocationTracking} />
+              <Route path="/features" component={Features} />
+              <Route path="/productivity" component={ProductivityFeatures} />
+            </>
+          )}
         </>
       )}
       <Route component={NotFound} />

@@ -46,6 +46,7 @@ export interface IStorage {
   // User operations (required for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  getAllUsers(): Promise<User[]>;
   
   // Form operations
   createForm(form: InsertForm): Promise<Form>;
@@ -122,6 +123,10 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users).orderBy(asc(users.createdAt));
   }
 
   // Form operations

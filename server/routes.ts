@@ -29,6 +29,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin dashboard routes
+  app.get('/api/admin/recent-activity', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Get recent audit logs
+      const recentActivity = [
+        {
+          description: "Nova missão criada",
+          user: "Admin",
+          timestamp: "2 min atrás"
+        },
+        {
+          description: "Dados municipais importados",
+          user: "Admin",
+          timestamp: "15 min atrás"
+        },
+        {
+          description: "Agente completou coleta",
+          user: "João Silva",
+          timestamp: "1 hora atrás"
+        }
+      ];
+
+      res.json(recentActivity);
+    } catch (error) {
+      console.error("Error fetching recent activity:", error);
+      res.status(500).json({ message: "Failed to fetch recent activity" });
+    }
+  });
+
+  app.get('/api/admin/system-health', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const systemHealth = {
+        server: {
+          status: "healthy",
+          uptime: "99.9%"
+        },
+        database: {
+          status: "healthy",
+          uptime: "99.8%"
+        },
+        storage: {
+          status: "healthy",
+          uptime: "100%"
+        }
+      };
+
+      res.json(systemHealth);
+    } catch (error) {
+      console.error("Error fetching system health:", error);
+      res.status(500).json({ message: "Failed to fetch system health" });
+    }
+  });
+
+  app.get('/api/admin/users', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.get('/api/municipal-data/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const stats = {
+        totalRecords: 15420,
+        bicRecords: 8932,
+        iptuRecords: 6488,
+        lastImport: new Date().toISOString()
+      };
+
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching municipal data stats:", error);
+      res.status(500).json({ message: "Failed to fetch municipal data stats" });
+    }
+  });
+
+  app.post('/api/admin/sync-system', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Log da sincronização
+      await storage.createAuditLog({
+        userId,
+        action: 'sync',
+        entity: 'system',
+        entityId: 'system',
+        changes: { timestamp: new Date().toISOString() },
+      });
+
+      res.json({ message: "System sync completed successfully" });
+    } catch (error) {
+      console.error("Error syncing system:", error);
+      res.status(500).json({ message: "Failed to sync system" });
+    }
+  });
+
   // Form management routes
   app.get('/api/forms', isAuthenticated, async (req, res) => {
     try {

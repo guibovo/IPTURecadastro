@@ -21,7 +21,7 @@ export default function BottomNavigation({ currentPage }: BottomNavigationProps)
   const navItems = [
     {
       id: "dashboard",
-      label: "Início",
+      label: user?.role === "admin" ? "Dashboard" : "Início",
       icon: Home,
       path: "/",
     },
@@ -43,21 +43,22 @@ export default function BottomNavigation({ currentPage }: BottomNavigationProps)
       icon: CloudUpload,
       path: "/sync",
     },
-    {
+  ];
+
+  // Add appropriate tabs based on user role
+  if (user?.role === "admin") {
+    navItems.push({
+      id: "admin",
+      label: "Config",
+      icon: Settings,
+      path: "/admin",
+    });
+  } else {
+    navItems.push({
       id: "features",
       label: "Recursos",
       icon: Star,
       path: "/features",
-    },
-  ];
-
-  // Add admin tab for admin users
-  if (user?.role === "admin") {
-    navItems.push({
-      id: "admin",
-      label: "Admin",
-      icon: Settings,
-      path: "/admin",
     });
   }
 
