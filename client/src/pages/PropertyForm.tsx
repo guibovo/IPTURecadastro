@@ -230,6 +230,25 @@ export default function PropertyForm() {
   const handleSave = async (data: PropertyFormData) => {
     try {
       await saveCollectionMutation.mutateAsync(data);
+      
+      // Aprendizado contínuo da IA BIC (executado em background)
+      if (mission?.municipio && data) {
+        try {
+          await fetch('/api/bic/learn-continuous', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              municipio: mission.municipio,
+              propertyData: data
+            }),
+          });
+          console.log(`IA BIC atualizada com novos dados para ${mission.municipio}`);
+        } catch (bicError) {
+          // Não bloquear o fluxo principal se o aprendizado BIC falhar
+          console.warn('Erro no aprendizado BIC (continuando normalmente):', bicError);
+        }
+      }
     } catch (error) {
       console.error("Error saving form:", error);
     }
@@ -260,6 +279,25 @@ export default function PropertyForm() {
     try {
       await saveCollectionMutation.mutateAsync(data);
       await updateMissionStatusMutation.mutateAsync('completed');
+      
+      // Aprendizado contínuo da IA BIC para dados finalizados (executado em background)
+      if (mission?.municipio && data) {
+        try {
+          await fetch('/api/bic/learn-continuous', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              municipio: mission.municipio,
+              propertyData: data
+            }),
+          });
+          console.log(`IA BIC atualizada com dados finalizados para ${mission.municipio}`);
+        } catch (bicError) {
+          // Não bloquear o fluxo principal se o aprendizado BIC falhar
+          console.warn('Erro no aprendizado BIC ao finalizar (continuando normalmente):', bicError);
+        }
+      }
       
       toast({
         title: "Coleta concluída!",

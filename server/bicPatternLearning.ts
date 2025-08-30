@@ -574,6 +574,225 @@ export class BICPatternLearningService {
     console.log(`Salvando padrões BIC para ${pattern.municipio}`);
   }
 
+  // Aprendizado incremental com novos dados coletados
+  async updatePatternsWithNewData(municipio: string, newPropertyData: any): Promise<void> {
+    try {
+      console.log(`Atualizando padrões BIC para ${municipio} com novos dados coletados`);
+
+      let currentPattern = this.patterns.get(municipio);
+      
+      // Se não existem padrões para este município, criar padrões iniciais
+      if (!currentPattern) {
+        console.log(`Criando padrões iniciais para ${municipio}`);
+        await this.analyzeAndLearnPatterns(municipio);
+        currentPattern = this.patterns.get(municipio);
+        if (!currentPattern) return;
+      }
+
+      // Atualizar padrões incrementalmente
+      const updatedPatterns = this.updatePatternsIncremental(currentPattern, newPropertyData);
+      
+      currentPattern.patterns = updatedPatterns;
+      currentPattern.lastUpdated = new Date();
+      currentPattern.sampleSize += 1;
+      
+      // Recalcular confiança baseada no tamanho da amostra
+      currentPattern.confidence = this.calculatePatternConfidence(currentPattern.sampleSize);
+
+      // Salvar padrões atualizados
+      this.patterns.set(municipio, currentPattern);
+      await this.savePatternToDatabase(currentPattern);
+
+      console.log(`Padrões BIC atualizados para ${municipio}. Nova confiança: ${currentPattern.confidence}`);
+    } catch (error) {
+      console.error(`Erro ao atualizar padrões BIC para ${municipio}:`, error);
+    }
+  }
+
+  // Atualização incremental dos padrões
+  private updatePatternsIncremental(currentPattern: BICPattern, newData: any) {
+    const updatedPatterns = { ...currentPattern.patterns };
+
+    // Atualizar padrões de endereço
+    if (newData.endereco) {
+      const newAddressPattern = this.generalizeAddress(newData.endereco);
+      if (!updatedPatterns.addressFormats.includes(newAddressPattern)) {
+        updatedPatterns.addressFormats.push(newAddressPattern);
+        // Manter apenas os 20 padrões mais relevantes
+        if (updatedPatterns.addressFormats.length > 20) {
+          updatedPatterns.addressFormats.shift();
+        }
+      }
+    }
+
+    // Atualizar padrões de CEP
+    if (newData.cep) {
+      const newZipPattern = newData.cep.substring(0, 5) + '-XXX';
+      if (!updatedPatterns.zipCodePatterns.includes(newZipPattern)) {
+        updatedPatterns.zipCodePatterns.push(newZipPattern);
+        if (updatedPatterns.zipCodePatterns.length > 10) {
+          updatedPatterns.zipCodePatterns.shift();
+        }
+      }
+    }
+
+    // Atualizar padrões de código de propriedade
+    if (newData.codigoPropriedade) {
+      const newCodePattern = this.generalizePropertyCode(newData.codigoPropriedade);
+      if (!updatedPatterns.propertyCodeFormats.includes(newCodePattern)) {
+        updatedPatterns.propertyCodeFormats.push(newCodePattern);
+        if (updatedPatterns.propertyCodeFormats.length > 15) {
+          updatedPatterns.propertyCodeFormats.shift();
+        }
+      }
+    }
+
+    // Atualizar padrões de nomes
+    if (newData.proprietario) {
+      const newNamePattern = this.analyzeNamePattern(newData.proprietario);
+      if (!updatedPatterns.ownerNamePatterns.includes(newNamePattern)) {
+        updatedPatterns.ownerNamePatterns.push(newNamePattern);
+        if (updatedPatterns.ownerNamePatterns.length > 10) {
+          updatedPatterns.ownerNamePatterns.shift();
+        }
+      }
+    }
+
+    // Atualizar tipos de propriedade
+    if (newData.tipoPropriedade) {
+      if (!updatedPatterns.commonPropertyTypes.includes(newData.tipoPropriedade)) {
+        updatedPatterns.commonPropertyTypes.push(newData.tipoPropriedade);
+        if (updatedPatterns.commonPropertyTypes.length > 15) {
+          updatedPatterns.commonPropertyTypes.shift();
+        }
+      }
+    }
+
+    // Atualizar padrões de bairro
+    if (newData.bairro) {
+      const normalizedNeighborhood = newData.bairro.toLowerCase().trim();
+      if (!updatedPatterns.neighborhoodPatterns.includes(normalizedNeighborhood)) {
+        updatedPatterns.neighborhoodPatterns.push(normalizedNeighborhood);
+        if (updatedPatterns.neighborhoodPatterns.length > 50) {
+          updatedPatterns.neighborhoodPatterns.shift();
+        }
+      }
+    }
+
+    // Atualizar faixas de ano de construção
+    if (newData.anoConstrucao && newData.anoConstrucao > 1800 && newData.anoConstrucao <= new Date().getFullYear()) {
+      this.updateRanges(updatedPatterns.constructionYearRanges, newData.anoConstrucao);
+    }
+
+    // Atualizar faixas de área
+    if (newData.areaTerreno && newData.areaTerreno > 0) {
+      this.updateRanges(updatedPatterns.areaSizeRanges, newData.areaTerreno);
+    }
+    if (newData.areaConstruida && newData.areaConstruida > 0) {
+      this.updateRanges(updatedPatterns.areaSizeRanges, newData.areaConstruida);
+    }
+
+    return updatedPatterns;
+  }
+
+  // Atualizar faixas numéricas incrementalmente
+  private updateRanges(currentRanges: number[], newValue: number): void {
+    if (currentRanges.length === 0) {
+      currentRanges.push(newValue, newValue, newValue, newValue);
+      return;
+    }
+
+    // Atualizar min e max
+    if (newValue < currentRanges[0]) currentRanges[0] = newValue;
+    if (newValue > currentRanges[1]) currentRanges[1] = newValue;
+    
+    // Recalcular percentis 25 e 75 de forma aproximada
+    const range = currentRanges[1] - currentRanges[0];
+    currentRanges[2] = currentRanges[0] + (range * 0.25);
+    currentRanges[3] = currentRanges[0] + (range * 0.75);
+  }
+
+  // Aprendizado contínuo baseado em feedback do usuário
+  async learnFromUserFeedback(municipio: string, propertyData: any, userAcceptedSuggestions: string[]): Promise<void> {
+    try {
+      console.log(`Aprendendo com feedback do usuário para ${municipio}`);
+      
+      const pattern = this.patterns.get(municipio);
+      if (!pattern) return;
+
+      // Aumentar peso dos padrões que foram aceitos pelo usuário
+      for (const acceptedField of userAcceptedSuggestions) {
+        // Implementar lógica de reforço positivo para padrões aceitos
+        this.reinforcePattern(pattern, acceptedField, propertyData[acceptedField]);
+      }
+
+      // Salvar padrões atualizados
+      this.patterns.set(municipio, pattern);
+      await this.savePatternToDatabase(pattern);
+
+      console.log(`Padrões reforçados baseados no feedback do usuário para ${municipio}`);
+    } catch (error) {
+      console.error(`Erro ao aprender com feedback do usuário para ${municipio}:`, error);
+    }
+  }
+
+  // Reforçar padrões baseados no feedback positivo
+  private reinforcePattern(pattern: BICPattern, field: string, value: any): void {
+    switch (field) {
+      case 'endereco':
+        const addressPattern = this.generalizeAddress(value);
+        // Mover padrão aceito para o início da lista (maior prioridade)
+        const addressIndex = pattern.patterns.addressFormats.indexOf(addressPattern);
+        if (addressIndex > 0) {
+          pattern.patterns.addressFormats.splice(addressIndex, 1);
+          pattern.patterns.addressFormats.unshift(addressPattern);
+        }
+        break;
+      
+      case 'tipoPropriedade':
+        // Mover tipo aceito para o início da lista
+        const typeIndex = pattern.patterns.commonPropertyTypes.indexOf(value);
+        if (typeIndex > 0) {
+          pattern.patterns.commonPropertyTypes.splice(typeIndex, 1);
+          pattern.patterns.commonPropertyTypes.unshift(value);
+        }
+        break;
+    }
+  }
+
+  // Otimização automática dos padrões
+  async optimizePatternsAutomatically(municipio: string): Promise<void> {
+    try {
+      const pattern = this.patterns.get(municipio);
+      if (!pattern) return;
+
+      console.log(`Otimizando padrões automaticamente para ${municipio}`);
+
+      // Remover padrões duplicados
+      pattern.patterns.addressFormats = [...new Set(pattern.patterns.addressFormats)];
+      pattern.patterns.zipCodePatterns = [...new Set(pattern.patterns.zipCodePatterns)];
+      pattern.patterns.propertyCodeFormats = [...new Set(pattern.patterns.propertyCodeFormats)];
+      pattern.patterns.commonPropertyTypes = [...new Set(pattern.patterns.commonPropertyTypes)];
+      pattern.patterns.neighborhoodPatterns = [...new Set(pattern.patterns.neighborhoodPatterns)];
+
+      // Ordenar por relevância (padrões mais comuns primeiro)
+      // Implementação simplificada - em produção usaria frequência real
+      pattern.patterns.commonPropertyTypes.sort();
+      pattern.patterns.neighborhoodPatterns.sort();
+
+      // Atualizar timestamp
+      pattern.lastUpdated = new Date();
+      
+      // Salvar padrões otimizados
+      this.patterns.set(municipio, pattern);
+      await this.savePatternToDatabase(pattern);
+
+      console.log(`Padrões otimizados para ${municipio}`);
+    } catch (error) {
+      console.error(`Erro ao otimizar padrões para ${municipio}:`, error);
+    }
+  }
+
   // Método público para obter padrões
   getPatternForMunicipality(municipio: string): BICPattern | undefined {
     return this.patterns.get(municipio);

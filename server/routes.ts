@@ -315,6 +315,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Endpoint para aprendizado contínuo durante coleta
+  app.post('/api/bic/learn-continuous', isAuthenticated, async (req: any, res) => {
+    try {
+      const { municipio, propertyData } = req.body;
+      
+      if (!municipio || !propertyData) {
+        return res.status(400).json({ message: "Municipality and property data are required" });
+      }
+
+      // Atualizar padrões com novos dados coletados
+      await bicPatternLearningService.updatePatternsWithNewData(municipio, propertyData);
+      
+      res.json({
+        message: "BIC patterns updated with new data",
+        municipio
+      });
+    } catch (error) {
+      console.error("Error in continuous BIC learning:", error);
+      res.status(500).json({ 
+        message: "Failed to update BIC patterns", 
+        error: error.message 
+      });
+    }
+  });
+
+  // Endpoint para aprendizado baseado em feedback do usuário
+  app.post('/api/bic/learn-feedback', isAuthenticated, async (req: any, res) => {
+    try {
+      const { municipio, propertyData, acceptedSuggestions } = req.body;
+      
+      if (!municipio || !propertyData || !acceptedSuggestions) {
+        return res.status(400).json({ 
+          message: "Municipality, property data, and accepted suggestions are required" 
+        });
+      }
+
+      // Aprender com feedback do usuário
+      await bicPatternLearningService.learnFromUserFeedback(municipio, propertyData, acceptedSuggestions);
+      
+      res.json({
+        message: "BIC patterns updated with user feedback",
+        municipio,
+        acceptedSuggestions
+      });
+    } catch (error) {
+      console.error("Error learning from user feedback:", error);
+      res.status(500).json({ 
+        message: "Failed to learn from user feedback", 
+        error: error.message 
+      });
+    }
+  });
+
+  // Endpoint para otimização automática de padrões
+  app.post('/api/bic/optimize-patterns/:municipio', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (user?.role !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const { municipio } = req.params;
+      
+      // Otimizar padrões automaticamente
+      await bicPatternLearningService.optimizePatternsAutomatically(municipio);
+      
+      res.json({
+        message: `BIC patterns optimized for ${municipio}`,
+        municipio
+      });
+    } catch (error) {
+      console.error("Error optimizing BIC patterns:", error);
+      res.status(500).json({ 
+        message: "Failed to optimize BIC patterns", 
+        error: error.message 
+      });
+    }
+  });
+
   // Form management routes
   app.get('/api/forms', isAuthenticated, async (req, res) => {
     try {
@@ -541,6 +622,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         referenceId: collection.id,
         payload: collectionData,
       });
+
+      // Aprendizado contínuo da IA BIC (executado em background)
+      if (collection.missionId) {
+        const mission = await storage.getMissionById(collection.missionId);
+        if (mission?.municipio) {
+          try {
+            await bicPatternLearningService.updatePatternsWithNewData(mission.municipio, collectionData);
+            console.log(`IA BIC atualizada com dados de coleta para ${mission.municipio}`);
+            
+            // Otimização automática a cada 10 submissões
+            // Usar uma contagem simples baseada em mission ID para triggerar otimização
+            const missionCollections = await storage.getPropertyCollectionsByMission(collection.missionId);
+            if (missionCollections.length % 10 === 0) {
+              await bicPatternLearningService.optimizePatternsAutomatically(mission.municipio);
+              console.log(`Padrões BIC otimizados automaticamente para ${mission.municipio} (${missionCollections.length} submissões)`);
+            }
+          } catch (bicError) {
+            console.warn('Erro no aprendizado BIC durante submissão:', bicError);
+          }
+        }
+      }
 
       // Audit log
       await storage.createAuditLog({

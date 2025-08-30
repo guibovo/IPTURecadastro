@@ -393,7 +393,25 @@ export default function BICSmartAssistant({
                             size="sm"
                             variant="outline"
                             className="h-6 text-xs"
-                            onClick={() => onApplySuggestion(suggestion.field, option)}
+                            onClick={() => {
+                              onApplySuggestion(suggestion.field, option);
+                              
+                              // Enviar feedback para aprendizado da IA BIC (executado em background)
+                              fetch('/api/bic/learn-feedback', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'include',
+                                body: JSON.stringify({
+                                  municipio,
+                                  propertyData: { ...currentPropertyData, [suggestion.field]: option },
+                                  acceptedSuggestions: [suggestion.field]
+                                }),
+                              }).then(() => {
+                                console.log(`IA BIC reforçada com feedback positivo para ${municipio}, campo: ${suggestion.field}`);
+                              }).catch((bicError) => {
+                                console.warn('Erro no feedback BIC:', bicError);
+                              });
+                            }}
                           >
                             {option}
                           </Button>
